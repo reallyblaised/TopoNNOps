@@ -16,7 +16,7 @@ class WeightVisualizer:
         self.feature_names = feature_names
 
     def create_weight_dashboard(self, sample_input: torch.Tensor, epoch: int) -> None:
-        """Create and log comprehensive weight visualization dashboard"""
+        """Create and log comprehensive neural network internals visualization dashboard"""
         # Extract layer information
         weights_data = self._get_layer_weights()
 
@@ -284,5 +284,5 @@ class WeightVisualizer:
         """
 
         # Log to MLflow
-        mlflow.log_dict(vega_spec, f"weight_visualization_epoch_{epoch}.json")
-        mlflow.log_text(html_content, f"weight_visualization_epoch_{epoch}.html")
+        mlflow.log_dict(vega_spec, f"internals_visualization_epoch_{epoch}.json")
+        mlflow.log_text(html_content, f"internals_visualization_epoch_{epoch}.html")

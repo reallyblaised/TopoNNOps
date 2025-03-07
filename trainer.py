@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.cuda.amp import autocast, GradScaler
+from torch.cuda.amp import GradScaler, autocast
 from torch.utils.data import DataLoader
 import mlflow
 from typing import Dict, List, Optional, Tuple
@@ -9,7 +9,7 @@ import numpy as np
 from omegaconf import DictConfig
 from tqdm import tqdm
 import time
-from visualization import ModelInterpretability
+from visualization import ModelPerformance as ModelInterpretability
 from weight_visualization import WeightVisualizer
 from sklearn.metrics import (
     roc_auc_score,
