@@ -8,7 +8,7 @@ from trainer import Trainer
 from data import LHCbMCModule
 import logging
 from typing import Union
-
+from loss import FocalLoss
 
 def get_model(cfg: DictConfig, input_dim: int) -> nn.Module:
     """Create model based on configuration"""
@@ -74,8 +74,6 @@ def get_criterion(cfg: DictConfig) -> nn.Module:
     if loss_fn == "bce_with_logits":
         return nn.BCEWithLogitsLoss()
     elif loss_fn == "focal":
-        from loss import FocalLoss
-
         return FocalLoss(
             alpha=cfg.training.get("focal_alpha", 1.0),
             gamma=cfg.training.get("focal_gamma", 2.0),
