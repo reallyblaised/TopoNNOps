@@ -1,0 +1,118 @@
+# defaults:
+#   - model: default
+#   - optimizer: adam
+#   - _self_
+
+# # Model architecture and training configuration
+# model:
+#   input_dim: 9  # Will be overridden by actual feature count
+#   layer_dims: [32, 64, 128, 64, 32]
+#   dropout_rate: 0.2
+#   batch_norm: true
+#   activation_fn: "relu"
+#   l1_factor: 0.01
+#   residual: true
+#   init_method: "xavier_uniform"
+
+# # Training parameters
+# training:
+#   num_epochs: 50
+#   batch_size: 128
+#   early_stopping_patience: 10
+#   use_mixed_precision: true
+#   grad_clip_val: 1.0
+#   loss_fn: "focal"  # Options: bce_with_logits, focal
+#   focal_alpha: 1.0  # Only used if loss_fn is focal
+#   focal_gamma: 2.0  # Only used if loss_fn is focal
+
+# # Optimizer settings
+# optimizer:
+#   name: "adam"
+#   lr: 1e-3
+#   weight_decay: 1e-4  # L2 regularization
+#   beta1: 0.9
+#   beta2: 0.999
+  
+#outout # Learning rate scheduler
+# scheduler:
+#   name: "reduce_on_plateau"  # Options: reduce_on_plateau, cosine, step
+#   mode: "min"
+#   factor: 0.1
+#   patience: 5
+#   min_lr: 1e-6
+
+# # Metrics configuration
+# metrics:
+#   threshold: 0.5
+#   compute:
+#     loss: true
+#     roc_auc: true
+#     accuracy: true
+#     precision: true
+#     recall: true
+#     f1: true
+
+# # Visualization settings
+# visualization:
+#   update_frequency: 5  # Generate visualizations every N epochs
+#   weights:
+#     enabled: true
+#     show_distributions: true
+#     show_gradients: true
+#   interpretability:
+#     enabled: true
+#     n_shap_samples: 100
+#     n_importance_permutations: 10
+  
+# MLflow configuration
+mlflow:
+  experiment_name: "lhcb_run3_topo_2body_classification_2024_tuning"
+  tracking_uri: "http://localhost:5000"  # Update with your MLflow server
+  tags:
+    project: "Topo2Body Training"
+    version: "Baseline"
+
+
+# # Data paths and configuration
+# paths:
+#   train_data: "/path/to/train.pkl"
+#   test_data: "/path/to/test.pkl"
+#   model_save_dir: "./models"
+
+# # System configuration
+# system:
+#   seed: 42
+#   num_workers: 4
+#   pin_memory: true
+
+
+# simple config
+# -------------
+# config.yaml - Baseline configuration
+defaults:
+  - architecture: unconstrained # options: unconstrained, lipschitz, lipschitz_monotonic
+  - model: default # variable latent complexity and regularisation 
+  - optimizer: adam 
+  - _self_
+
+metrics:
+  threshold: 0.5
+  compute:
+    loss: true
+    roc_auc: true
+    accuracy: true
+    precision: true
+    recall: true
+    f1: true
+
+
+training:
+  training_data_scale_factor: 0.01
+  num_epochs: 30
+  batch_size: 128
+  loss_fn: "bce_with_logits"
+
+paths:
+  train_data: "/ceph/submit/data/user/b/blaised/hlt2topo_sp/scratch/TwoBody/preprocessed/train.pkl"
+  test_data: "/ceph/submit/data/user/b/blaised/hlt2topo_sp/scratch/TwoBody/preprocessed/test.pkl"
+  model_save_dir: "./models"
