@@ -132,24 +132,28 @@ class WeightVisualizer:
             .interactive()
         )
 
-    def _create_weight_distribution(
-        self, weights: np.ndarray, layer_name: str
-    ) -> alt.Chart:
+    def _create_weight_distribution(self, weights: np.ndarray, layer_name: str) -> alt.Chart:
         """Create weight distribution visualization"""
         # Flatten weights and create DataFrame
         flat_weights = weights.flatten()
         df = pd.DataFrame({"weight": flat_weights, "layer": f"Layer {layer_name}"})
 
-        # Create distribution plot
+        # Instead of using transform_density, create a histogram
         chart = (
             alt.Chart(df)
-            .transform_density("weight", as_=["weight", "density"], groupby=["layer"])
-            .mark_area(opacity=0.5)
+            .mark_bar(opacity=0.5)
             .encode(
-                x=alt.X("weight:Q", title="Weight Value"),
-                y=alt.Y("density:Q", title="Density"),
+                x=alt.X(
+                    "weight:Q", 
+                    title="Weight Value",
+                    bin=alt.Bin(maxbins=30)  # Use binning instead of density transform
+                ),
+                y=alt.Y(
+                    "count():Q", 
+                    title="Count"
+                ),
                 color="layer:N",
-                tooltip=["layer", "weight", "density"],
+                tooltip=["layer", alt.Tooltip("weight:Q", bin=True), "count()"]
             )
             .properties(
                 width=400, height=200, title=f"Weight Distribution - Layer {layer_name}"
@@ -228,18 +232,22 @@ class WeightVisualizer:
                         }
                     )
 
-                    # Create distribution plot
+                    # Create histogram plot (instead of density)
                     chart = (
                         alt.Chart(df)
-                        .transform_density(
-                            "gradient", as_=["gradient", "density"], groupby=["layer"]
-                        )
-                        .mark_area(opacity=0.5)
+                        .mark_bar(opacity=0.5)
                         .encode(
-                            x=alt.X("gradient:Q", title="Gradient Value"),
-                            y=alt.Y("density:Q", title="Density"),
+                            x=alt.X(
+                                "gradient:Q", 
+                                title="Gradient Value",
+                                bin=alt.Bin(maxbins=30)
+                            ),
+                            y=alt.Y(
+                                "count():Q", 
+                                title="Count"
+                            ),
                             color="layer:N",
-                            tooltip=["layer", "gradient", "density"],
+                            tooltip=["layer", alt.Tooltip("gradient:Q", bin=True), "count()"]
                         )
                         .properties(
                             width=400,

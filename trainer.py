@@ -250,7 +250,7 @@ class Trainer:
         epoch: int,
     ) -> None:
         """Generate and log visualizations"""
-        self.interpretability.create_interpretability_dashboard(
+        self.interpretability.create_performance_dashboard(
             X_viz.cpu().numpy(), y_viz.numpy(), history, epoch
         )
         self.weight_viz.create_weight_dashboard(X_viz, epoch)

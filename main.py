@@ -120,6 +120,7 @@ def main(cfg: DictConfig) -> None:
             scheduler = get_scheduler(cfg, optimizer)
             criterion = get_criterion(cfg)
 
+
             # Create trainer and train
             trainer = Trainer(
                 model=model,
