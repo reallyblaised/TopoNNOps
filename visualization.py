@@ -1,7 +1,9 @@
 import numpy as np
 import pandas as pd
 import torch
-import altair as alt
+import plotly.graph_objects as go
+import plotly.express as px
+from plotly.subplots import make_subplots
 from sklearn.inspection import permutation_importance
 import mlflow
 import json
@@ -25,28 +27,47 @@ class ModelPerformance:
         self, X: np.ndarray, y: np.ndarray, history: Dict[str, list], epoch: int
     ) -> None:
         """Create and log comprehensive interpretability dashboard"""
+        # Create a subplot figure for all visualizations
+        fig = make_subplots(
+            rows=4, cols=2,
+            subplot_titles=(
+                "Feature Importance (Permutation)", "SHAP Summary Plot",
+                "Learning Curves", "Metric Evolution",
+                "ROC Curve", "Precision-Recall Curve",
+                "Prediction Distribution", ""
+            ),
+            specs=[
+                [{"type": "bar"}, {"type": "scatter"}],
+                [{"type": "scatter"}, {"type": "scatter"}],
+                [{"type": "scatter"}, {"type": "scatter"}],
+                [{"colspan": 2, "type": "histogram"}, None]
+            ],
+            vertical_spacing=0.1,
+            horizontal_spacing=0.05
+        )
+        
         # Generate all visualizations
-        feature_importance = self._get_feature_importance(X, y)
-        shap_summary = self._get_shap_summary(X) 
-        learning_curves = self._get_learning_curves(history)
-        metric_evolution = self._get_metric_evolution(history)
+        self._add_feature_importance(fig, X, y, row=1, col=1)
+        self._add_shap_summary(fig, X, row=1, col=2)
+        self._add_learning_curves(fig, history, row=2, col=1)
+        self._add_metric_evolution(fig, history, row=2, col=2)
         
         # Get predictions for curve generation
         y_pred = self._get_predictions(X)
-        roc_curve_chart = self._get_roc_curve(y, y_pred)
-        pr_curve_chart = self._get_pr_curve(y, y_pred)
-        pred_dist = self._get_prediction_distribution(X)
+        self._add_roc_curve(fig, y, y_pred, row=3, col=1)
+        self._add_pr_curve(fig, y, y_pred, row=3, col=2)
+        self._add_prediction_distribution(fig, X, row=4, col=1)
 
-        # Combine charts into a dashboard layout
-        dashboard = alt.vconcat(
-            alt.hconcat(feature_importance, shap_summary),
-            alt.hconcat(learning_curves, metric_evolution),
-            alt.hconcat(roc_curve_chart, pr_curve_chart),
-            pred_dist
-        ).resolve_scale(color="independent")
+        # Update layout
+        fig.update_layout(
+            height=1200,
+            width=1200,
+            title_text=f"Model Performance Dashboard - Epoch {epoch}",
+            showlegend=True
+        )
 
         # Log to MLflow
-        self._log_dashboard(dashboard, epoch)
+        self._log_dashboard(fig, epoch)
 
     def _get_predictions(self, X: np.ndarray) -> np.ndarray:
         """Get model predictions"""
@@ -56,9 +77,9 @@ class ModelPerformance:
             outputs = self.model(X_tensor)
             return torch.sigmoid(outputs).cpu().numpy()
 
-    def _get_feature_importance(
-        self, X: np.ndarray, y: np.ndarray, n_repeats: int = 10
-    ) -> alt.Chart:
+    def _add_feature_importance(
+        self, fig, X: np.ndarray, y: np.ndarray, row: int, col: int, n_repeats: int = 10
+    ) -> None:
         """Calculate and visualize permutation feature importance"""
         # Create a sklearn-compatible estimator wrapper for our PyTorch model
         class ModelWrapper:
@@ -96,37 +117,31 @@ class ModelPerformance:
                 "Std": perm_importance.importances_std,
             }
         )
-
-        # Create feature importance chart
-        chart = (
-            alt.Chart(importance_df)
-            .mark_bar()
-            .encode(
-                x=alt.X("Importance:Q", title="Feature Importance"),
-                y=alt.Y("Feature:N", sort="-x", title="Feature Name"),
-                tooltip=["Feature", "Importance", "Std"],
-            )
-            .properties(width=400, height=300, title="Feature Importance (Permutation)")
+        
+        # Sort by importance
+        importance_df = importance_df.sort_values("Importance", ascending=True)
+        
+        # Create bar chart
+        fig.add_trace(
+            go.Bar(
+                x=importance_df["Importance"],
+                y=importance_df["Feature"],
+                orientation="h",
+                error_x=dict(
+                    type="data",
+                    array=importance_df["Std"]
+                ),
+                name="Feature Importance",
+                hovertemplate="<b>%{y}</b><br>Importance: %{x:.4f}<br>Std: %{error_x.array:.4f}<extra></extra>"
+            ),
+            row=row, col=col
         )
+        
+        # Update axes
+        fig.update_xaxes(title_text="Feature Importance", row=row, col=col)
+        fig.update_yaxes(title_text="Feature Name", row=row, col=col)
 
-        # Add error bars
-        error_bars = (
-            alt.Chart(importance_df)
-            .mark_errorbar()
-            .encode(
-                x=alt.X("min:Q", title="Feature Importance"),
-                x2="max:Q",
-                y=alt.Y("Feature:N", sort="-x"),
-            )
-            .transform_calculate(
-                min="datum.Importance - datum.Std", max="datum.Importance + datum.Std"
-            )
-        )
-
-        # Combine the charts - the + operator creates a compound chart
-        return chart + error_bars
-
-    def _get_shap_summary(self, X: np.ndarray, n_samples: int = 100) -> alt.Chart:
+    def _add_shap_summary(self, fig, X: np.ndarray, row: int, col: int, n_samples: int = 100) -> None:
         """Generate SHAP summary plot"""
         # Create background dataset
         background = X[np.random.choice(X.shape[0], n_samples, replace=False)]
@@ -150,202 +165,213 @@ class ModelPerformance:
                     # Distribute the SHAP value across features (or use another strategy)
                     for i in range(len(self.feature_names)):
                         temp_data[:, i] = reshaped_shap[:, 0]
-                    shap_df = pd.DataFrame(temp_data, columns=self.feature_names).melt()
+                    shap_df = pd.DataFrame(temp_data, columns=self.feature_names)
                 else:
                     # Use only the columns we have values for
                     feature_subset = self.feature_names[:reshaped_shap.shape[1]]
-                    shap_df = pd.DataFrame(reshaped_shap, columns=feature_subset).melt()
+                    shap_df = pd.DataFrame(reshaped_shap, columns=feature_subset)
             else:
                 # Try to use as many features as we have in shap_values
                 feature_subset = self.feature_names[:shap_values[0].shape[1]]
-                shap_df = pd.DataFrame(shap_values[0], columns=feature_subset).melt()
+                shap_df = pd.DataFrame(shap_values[0], columns=feature_subset)
         else:
             # Normal case
-            shap_df = pd.DataFrame(shap_values[0], columns=self.feature_names).melt()
-            
-        shap_df["abs_value"] = abs(shap_df["value"])
-
-        # Create SHAP summary chart
-        chart = (
-            alt.Chart(shap_df)
-            .mark_circle()
-            .encode(
-                x=alt.X("value:Q", title="SHAP value"),
-                y=alt.Y(
-                    "variable:N",
-                    title="Feature",
-                    sort=alt.EncodingSortField(
-                        field="abs_value", op="mean", order="descending"
+            shap_df = pd.DataFrame(shap_values[0], columns=self.feature_names)
+        
+        # Calculate means for sorting
+        mean_abs_values = {feature: abs(values).mean() for feature, values in shap_df.items()}
+        sorted_features = sorted(mean_abs_values.keys(), key=lambda x: mean_abs_values[x], reverse=True)
+        
+        # Prepare data for scatter plot
+        for feature in sorted_features:
+            values = shap_df[feature].values
+            # Create scatter plot for each feature
+            fig.add_trace(
+                go.Scatter(
+                    x=values,
+                    y=[feature] * len(values),
+                    mode="markers",
+                    marker=dict(
+                        size=8,
+                        color=values,
+                        colorscale="RdBu",
+                        cmin=-abs(values).max(),
+                        cmax=abs(values).max(),
+                        colorbar=dict(title="SHAP Value") if feature == sorted_features[-1] else None,
+                        showscale=feature == sorted_features[-1]
                     ),
+                    name=feature,
+                    showlegend=False,
+                    hovertemplate=f"<b>{feature}</b><br>SHAP Value: %{{x:.4f}}<extra></extra>"
                 ),
-                color=alt.Color(
-                    "value:Q", scale=alt.Scale(scheme="redblue"), title="Impact"
-                ),
-                size=alt.Size("abs_value:Q", title="|SHAP value|"),
-                tooltip=["variable", "value", "abs_value"],
+                row=row, col=col
             )
-            .properties(width=400, height=300, title="SHAP Summary Plot")
-            .interactive()
-        )
+        
+        # Update axes
+        fig.update_xaxes(title_text="SHAP Value", row=row, col=col)
+        fig.update_yaxes(title_text="Feature", row=row, col=col)
 
-        return chart
-
-    def _get_learning_curves(self, history: Dict[str, list]) -> alt.Chart:
+    def _add_learning_curves(self, fig, history: Dict[str, list], row: int, col: int) -> None:
         """Generate interactive learning curves"""
-        # Create DataFrame
+        # Create DataFrames
         epochs = range(len(history["train_loss"]))
-        df = pd.DataFrame(
-            {
-                "Epoch": list(epochs) * 2,
-                "Loss": history["train_loss"]
-                + [m["loss"] for m in history["eval_metrics"]],
-                "Type": ["Train"] * len(epochs) + ["Validation"] * len(epochs),
-            }
+        
+        # Add train loss
+        fig.add_trace(
+            go.Scatter(
+                x=list(epochs),
+                y=history["train_loss"],
+                mode="lines+markers",
+                name="Train Loss",
+                line=dict(color="blue"),
+                hovertemplate="Epoch: %{x}<br>Loss: %{y:.4f}<extra></extra>"
+            ),
+            row=row, col=col
         )
-
-        # Create chart
-        chart = (
-            alt.Chart(df)
-            .mark_line(point=True)
-            .encode(
-                x="Epoch:Q",
-                y="Loss:Q",
-                color="Type:N",
-                tooltip=["Epoch", "Loss", "Type"],
-            )
-            .properties(width=400, height=300, title="Learning Curves")
-            .interactive()
+        
+        # Add validation loss
+        fig.add_trace(
+            go.Scatter(
+                x=list(epochs),
+                y=[m["loss"] for m in history["eval_metrics"]],
+                mode="lines+markers",
+                name="Validation Loss",
+                line=dict(color="red"),
+                hovertemplate="Epoch: %{x}<br>Loss: %{y:.4f}<extra></extra>"
+            ),
+            row=row, col=col
         )
+        
+        # Update axes
+        fig.update_xaxes(title_text="Epoch", row=row, col=col)
+        fig.update_yaxes(title_text="Loss", row=row, col=col)
 
-        return chart
-
-    def _get_metric_evolution(self, history: Dict[str, list]) -> alt.Chart:
+    def _add_metric_evolution(self, fig, history: Dict[str, list], row: int, col: int) -> None:
         """Generate metric evolution plots"""
         # Extract metrics
         metrics = list(history["eval_metrics"][0].keys())
-        data = []
+        epochs = range(len(history["eval_metrics"]))
+        
+        # For each metric except loss (which is shown in learning curves)
+        for metric in metrics:
+            if metric != "loss":
+                values = [metrics_dict[metric] for metrics_dict in history["eval_metrics"]]
+                fig.add_trace(
+                    go.Scatter(
+                        x=list(epochs),
+                        y=values,
+                        mode="lines+markers",
+                        name=metric.capitalize(),
+                        hovertemplate=f"Epoch: %{{x}}<br>{metric.capitalize()}: %{{y:.4f}}<extra></extra>"
+                    ),
+                    row=row, col=col
+                )
+        
+        # Update axes
+        fig.update_xaxes(title_text="Epoch", row=row, col=col)
+        fig.update_yaxes(title_text="Value", row=row, col=col)
 
-        for epoch, metrics_dict in enumerate(history["eval_metrics"]):
-            for metric, value in metrics_dict.items():
-                if metric != "loss":  # Loss is shown in learning curves
-                    data.append({"Epoch": epoch, "Metric": metric, "Value": value})
-
-        df = pd.DataFrame(data)
-
-        # Create chart
-        chart = (
-            alt.Chart(df)
-            .mark_line(point=True)
-            .encode(
-                x="Epoch:Q",
-                y="Value:Q",
-                color="Metric:N",
-                tooltip=["Epoch", "Metric", "Value"],
-            )
-            .properties(width=400, height=300, title="Metric Evolution")
-            .interactive()
-        )
-
-        return chart
-
-    def _get_roc_curve(self, y_true: np.ndarray, y_pred: np.ndarray) -> alt.Chart:
+    def _add_roc_curve(self, fig, y_true: np.ndarray, y_pred: np.ndarray, row: int, col: int) -> None:
         """Generate ROC curve visualization"""
         # Calculate ROC curve
         fpr, tpr, _ = roc_curve(y_true, y_pred)
         roc_auc = auc(fpr, tpr)
-
-        # Create DataFrame
-        df = pd.DataFrame({"False Positive Rate": fpr, "True Positive Rate": tpr})
         
-        # Base chart
-        base_chart = alt.Chart(df).mark_line().encode(
-            x=alt.X("False Positive Rate", title="False Positive Rate"),
-            y=alt.Y("True Positive Rate", title="True Positive Rate"),
-        ).properties(
-            width=400, 
-            height=300, 
-            title=f"ROC Curve (AUC = {roc_auc:.3f})"
+        # Add ROC curve
+        fig.add_trace(
+            go.Scatter(
+                x=fpr,
+                y=tpr,
+                mode="lines",
+                name=f"ROC Curve (AUC = {roc_auc:.3f})",
+                line=dict(color="blue"),
+                hovertemplate="FPR: %{x:.4f}<br>TPR: %{y:.4f}<extra></extra>"
+            ),
+            row=row, col=col
         )
         
-        # Add diagonal reference line as another chart
-        diag_data = pd.DataFrame({"x": [0, 1], "y": [0, 1]})
-        diag_line = alt.Chart(diag_data).mark_line(
-            strokeDash=[4, 4], 
-            color="gray"
-        ).encode(
-            x="x", 
-            y="y"
+        # Add diagonal reference line
+        fig.add_trace(
+            go.Scatter(
+                x=[0, 1],
+                y=[0, 1],
+                mode="lines",
+                name="Reference",
+                line=dict(color="gray", dash="dash"),
+                showlegend=False,
+                hovertemplate="<extra></extra>"
+            ),
+            row=row, col=col
         )
         
-        # Use the approach that maintains the correct return type
-        result = base_chart + diag_line
-        
-        return result
+        # Update axes
+        fig.update_xaxes(title_text="False Positive Rate", row=row, col=col)
+        fig.update_yaxes(title_text="True Positive Rate", row=row, col=col)
     
-    def _get_pr_curve(self, y_true: np.ndarray, y_pred: np.ndarray) -> alt.Chart:
+    def _add_pr_curve(self, fig, y_true: np.ndarray, y_pred: np.ndarray, row: int, col: int) -> None:
         """Generate Precision-Recall curve visualization"""
         # Calculate PR curve
         precision, recall, _ = precision_recall_curve(y_true, y_pred)
         pr_auc = average_precision_score(y_true, y_pred)
         
-        # Create DataFrame
-        df = pd.DataFrame({"Recall": recall, "Precision": precision})
-        
-        # Base chart
-        base_chart = alt.Chart(df).mark_line().encode(
-            x=alt.X("Recall", title="Recall"),
-            y=alt.Y("Precision", title="Precision"),
-        ).properties(
-            width=400, 
-            height=300, 
-            title=f"Precision-Recall Curve (AP = {pr_auc:.3f})"
+        # Add PR curve
+        fig.add_trace(
+            go.Scatter(
+                x=recall,
+                y=precision,
+                mode="lines",
+                name=f"PR Curve (AP = {pr_auc:.3f})",
+                line=dict(color="green"),
+                hovertemplate="Recall: %{x:.4f}<br>Precision: %{y:.4f}<extra></extra>"
+            ),
+            row=row, col=col
         )
         
         # Add baseline line (class distribution)
         baseline = np.mean(y_true)
-        baseline_data = pd.DataFrame({"x": [0, 1], "y": [baseline, baseline]})
-        baseline_line = alt.Chart(baseline_data).mark_line(
-            strokeDash=[4, 4], 
-            color="gray"
-        ).encode(
-            x="x", 
-            y="y"
+        fig.add_trace(
+            go.Scatter(
+                x=[0, 1],
+                y=[baseline, baseline],
+                mode="lines",
+                name="Baseline",
+                line=dict(color="gray", dash="dash"),
+                showlegend=False,
+                hovertemplate=f"Baseline: {baseline:.4f}<extra></extra>"
+            ),
+            row=row, col=col
         )
         
-        # Use the approach that maintains the correct return type
-        result = base_chart + baseline_line
-        
-        return result
+        # Update axes
+        fig.update_xaxes(title_text="Recall", row=row, col=col)
+        fig.update_yaxes(title_text="Precision", row=row, col=col)
 
-    def _get_prediction_distribution(self, X: np.ndarray) -> alt.Chart:
+    def _add_prediction_distribution(self, fig, X: np.ndarray, row: int, col: int) -> None:
         """Generate prediction distribution visualization"""
         # Get predictions
         predictions = self._get_predictions(X).ravel()
         
-        # Create DataFrame
-        df = pd.DataFrame({"Prediction": predictions})
-        
-        # Create histogram chart
-        chart = (
-            alt.Chart(df)
-            .mark_bar()
-            .encode(
-                x=alt.X("Prediction:Q", bin=alt.Bin(maxbins=30), title="Prediction Score"),
-                y=alt.Y("count()", title="Count"),
-                tooltip=["count()", alt.Tooltip("Prediction:Q", bin=alt.Bin(maxbins=30))]
-            )
-            .properties(width=800, height=200, title="Prediction Distribution")
-            .interactive()
+        # Add histogram
+        fig.add_trace(
+            go.Histogram(
+                x=predictions,
+                nbinsx=30,
+                name="Prediction Counts",
+                marker_color="rgba(50, 168, 82, 0.7)",
+                hovertemplate="Prediction: %{x}<br>Count: %{y}<extra></extra>"
+            ),
+            row=row, col=col
         )
         
-        return chart
+        # Update axes
+        fig.update_xaxes(title_text="Prediction Score", row=row, col=col)
+        fig.update_yaxes(title_text="Count", row=row, col=col)
     
-    def _log_dashboard(self, dashboard: alt.Chart, epoch: int) -> None:
+    def _log_dashboard(self, fig, epoch: int) -> None:
         """Log dashboard to MLflow"""
-        # Save chart to HTML
-        html = dashboard.to_html()
+        # Save figure as HTML
+        html = fig.to_html(full_html=True, include_plotlyjs="cdn")
         
-        # In test environment, handle the mock file differently
         try:
             import tempfile
             # Create a named temporary file
@@ -367,3 +393,6 @@ class ModelPerformance:
             import os
             mock_path = getattr(tempfile.NamedTemporaryFile(), 'name', '/tmp/dashboard.html')
             mlflow.log_artifact(mock_path, f"visualization/performance_dashboard_epoch_{epoch}")
+            
+        # Also log as JSON for programmatic access
+        mlflow.log_dict(fig.to_dict(), f"visualization/performance_dashboard_epoch_{epoch}.json")
