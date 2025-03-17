@@ -89,6 +89,8 @@ def main(cfg: DictConfig) -> None:
 
     # MLflow experiment setup
     mlflow.set_experiment(cfg.mlflow.experiment_name)
+    mlflow.set_tracking_uri(cfg.mlflow.tracking_uri)
+    print(f"Setting mlflow tracking uri: {mlflow.get_tracking_uri()}")  
 
     with mlflow.start_run():
         # Log all configurations
