@@ -88,9 +88,18 @@ def main(cfg: DictConfig) -> None:
     logger = logging.getLogger(__name__)
 
     # MLflow experiment setup
-    mlflow.set_experiment(cfg.mlflow.experiment_name)
-    mlflow.set_tracking_uri(cfg.mlflow.tracking_uri)
-    print(f"Setting mlflow tracking uri: {mlflow.get_tracking_uri()}")  
+    try:
+        mlflow.set_tracking_uri(cfg.mlflow.tracking_uri)
+        experiment = mlflow.get_experiment_by_name(cfg.mlflow.experiment_name)
+        if experiment is None:
+            experiment_id = mlflow.create_experiment(cfg.mlflow.experiment_name)
+        else:
+            experiment_id = experiment.experiment_id
+        mlflow.set_experiment(cfg.mlflow.experiment_name)
+        logger.info(f"Using MLflow experiment: {cfg.mlflow.experiment_name} (ID: {experiment_id})")
+    except Exception as e:
+        logger.warning(f"MLflow setup failed: {str(e)}. Training will continue without tracking.")
+
 
     with mlflow.start_run():
         # Log all configurations
