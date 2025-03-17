@@ -1,5 +1,9 @@
-# simple model config
-# -------------------
-input_dim: null  # Will be set based on data
-layer_dims: [32, 64, 128, 64, 32]
+# Default model configuration
+input_dim: 9  # Will be overridden by actual feature count
+layer_dims: [32, 64, 32]
+dropout_rate: 0.2
+batch_norm: true
 activation_fn: "relu"
+l1_factor: 0.01
+residual: false
+init_method: "xavier_uniform"

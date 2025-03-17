@@ -89,8 +89,8 @@ mlflow:
 # simple config
 # -------------
 # config.yaml - Baseline configuration
+architecture: unconstrained # options: unconstrained, lipschitz, lipschitz_monotonic
 defaults:
-  - architecture: unconstrained # options: unconstrained, lipschitz, lipschitz_monotonic
   - model: default # variable latent complexity and regularisation 
   - optimizer: adam 
   - _self_
@@ -108,7 +108,7 @@ metrics:
 
 training:
   training_data_scale_factor: 0.01
-  num_epochs: 30
+  num_epochs: 3
   batch_size: 128
   loss_fn: "bce_with_logits"
 
