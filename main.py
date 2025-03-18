@@ -10,6 +10,7 @@ import logging
 from typing import Union
 from loss import FocalLoss
 
+
 def get_model(cfg: DictConfig, input_dim: int) -> nn.Module:
     """Create model based on configuration"""
     if cfg.architecture == "unconstrained":
@@ -117,9 +118,9 @@ def main(cfg: DictConfig) -> None:
             data_module.setup(
                 batch_size=cfg.training.batch_size,
                 scale_factor=cfg.training.get(
-                    "scale_factor", 0.1
+                    "training_data_scale_factor", 1.0
                 ),  # how much training data is read in
-                ratio=cfg.training.get("ratio", 0.01),  # minbias:signal ratio
+                ratio=cfg.training.get("sb_ratio", 0.01),  # minbias:signal ratio
             )
 
             # Create model
@@ -130,7 +131,6 @@ def main(cfg: DictConfig) -> None:
             optimizer = get_optimizer(cfg, model)
             scheduler = get_scheduler(cfg, optimizer)
             criterion = get_criterion(cfg)
-
 
             # Create trainer and train
             trainer = Trainer(
