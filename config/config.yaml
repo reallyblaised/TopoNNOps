@@ -107,8 +107,9 @@ metrics:
 
 
 training:
-  training_data_scale_factor: 0.01
-  num_epochs: 3
+  training_data_scale_factor: 1.0
+  sb_ratio: 0.01
+  num_epochs: 10
   batch_size: 128
   loss_fn: "bce_with_logits"
 

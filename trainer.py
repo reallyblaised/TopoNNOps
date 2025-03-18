@@ -253,7 +253,7 @@ class Trainer:
         self.interpretability.create_performance_dashboard(
             X_viz.cpu().numpy(), y_viz.numpy(), history, epoch
         )
-        self.weight_viz.create_weight_dashboard(X_viz, epoch)
+        # self.weight_viz.create_weight_dashboard(X_viz, epoch)
 
     def _save_checkpoint(self, epoch: int, metrics: Dict[str, float]) -> None:
         """Save model checkpoint"""

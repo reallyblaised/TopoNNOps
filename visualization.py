@@ -47,8 +47,8 @@ class ModelPerformance:
         )
         
         # Generate all visualizations
-        self._add_feature_importance(fig, X, y, row=1, col=1)
-        self._add_shap_summary(fig, X, row=1, col=2)
+        #self._add_feature_importance(fig, X, y, row=1, col=1)
+        #self._add_shap_summary(fig, X, row=1, col=2)
         self._add_learning_curves(fig, history, row=2, col=1)
         self._add_metric_evolution(fig, history, row=2, col=2)
         
@@ -56,7 +56,7 @@ class ModelPerformance:
         y_pred = self._get_predictions(X)
         self._add_roc_curve(fig, y, y_pred, row=3, col=1)
         self._add_pr_curve(fig, y, y_pred, row=3, col=2)
-        self._add_prediction_distribution(fig, X, row=4, col=1)
+        #self._add_prediction_distribution(fig, X, row=4, col=1)
 
         # Update layout
         fig.update_layout(
