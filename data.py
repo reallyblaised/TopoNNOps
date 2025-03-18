@@ -51,8 +51,8 @@ class LHCbMCModule:
         """Returns the number of features for the specified model"""
         return len(LHCbMCModule.feature_config(model=model).keys())
 
-    def _process_training_data(
-        self, train_data: pd.DataFrame, scale_factor: float = 1.0, ratio: float = 0.01
+    def _process_sb_data(
+        self, train_data: pd.DataFrame, scale_factor: float = 1.0, ratio: float = 0.1
     ):
         """Setup with controlled background-to-signal ratio and scale factor"""
         # Split background and signal
@@ -75,16 +75,20 @@ class LHCbMCModule:
         return train_data
 
     def setup(
-        self, batch_size: int = 128, scale_factor: float = 1.0, ratio: float = 0.01
+        self, batch_size: int = 128, scale_factor: float = 1.0, ratio: float = 0.1
     ):
         """Setup the DataLoaders for training and testing data."""
-        train_data = self._process_training_data(
+        train_data = self._process_sb_data(
             pd.read_pickle(self.train_path),
             scale_factor=scale_factor,
             ratio=ratio,
         )
         # we can simply load the test data owing to reduced size
-        test_data = pd.read_pickle(self.test_path)
+        test_data = self._process_sb_data(
+            pd.read_pickle(self.test_path),
+            scale_factor=scale_factor,
+            ratio=ratio,
+        )
 
         # fetch the features
         self.feature_cols = [feat for feat in self.feature_config().keys()]
