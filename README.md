@@ -64,7 +64,25 @@ A neural network with Lipschitz constraints, optionally with monotonicity:
 - Supports feature-specific monotonicity constraints via SigmaNet
 - Configurable through features.yml
 
+## Example UI via MLflow 
+The framework includes a simple UI for visualizing model performance metrics, ROC curves, confusion matrices, and learning curves, and so on. This helps in understanding the model's evolving behaviour during the training - as evaluated on a validation dataset.
+
+![Training Dashboard](assets/dashboard.png)
+
+![Performance Metrics](assets/metrics.png)
+
+![Performance Curves](assets/curves.png)
 ## Usage
+
+### Setting Up MLflow Tracking
+
+To start the MLflow tracking server:
+
+```bash
+bash setup_mlflow_remote.sh
+```
+
+This will set up MLflow based on your configuration and allow you to track experiments.
 
 ### Configuration
 
@@ -132,16 +150,6 @@ You can override configuration options via command line:
 ```bash
 python main.py model.layer_dims=[128,64,32] training.batch_size=512
 ```
-
-### Setting Up MLflow Tracking
-
-To start the MLflow tracking server:
-
-```bash
-bash setup_mlflow_remote.sh
-```
-
-This will set up MLflow based on your configuration and allow you to track experiments.
 
 ## Key Components
 
