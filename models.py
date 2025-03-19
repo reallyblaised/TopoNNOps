@@ -291,7 +291,7 @@ class LipschitzNet(nn.Module):
             monotone_constraints = self._load_monotone_constrs(
                 self.features_config_path, self.nbody
             )
-            
+
             # Ensure we have the right number of constraints
             assert len(monotone_constraints) == self.input_dim, \
                 f"Number of monotonicity constraints ({len(monotone_constraints)}) " \
@@ -303,7 +303,7 @@ class LipschitzNet(nn.Module):
                 sigma=self.lip_const, 
                 monotone_constraints=monotone_constraints
             )
-        
+            
         return model
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:

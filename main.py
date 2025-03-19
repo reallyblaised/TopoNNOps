@@ -8,7 +8,7 @@ from trainer import Trainer
 from data import LHCbMCModule
 import logging
 from typing import Union, List
-from loss import FocalLoss
+from loss import FocalLoss, CombinedFocalBCELoss, WeightedBCELoss
 
 
 def get_model(cfg: DictConfig, input_dim: int, feature_names: List[str]) -> nn.Module:
@@ -113,6 +113,13 @@ def get_criterion(cfg: DictConfig) -> nn.Module:
         return nn.BCEWithLogitsLoss()
     elif loss_fn == "focal":
         return FocalLoss(
+            alpha=cfg.training.get("focal_alpha", 1.0),
+            gamma=cfg.training.get("focal_gamma", 2.0),
+        )
+    elif loss_fn == "weighted_bce":
+        return nn.BCEWithLogitsLoss()
+    elif loss_fn == "combined_focal_wbce":
+        return CombinedFocalBCELoss(
             alpha=cfg.training.get("focal_alpha", 1.0),
             gamma=cfg.training.get("focal_gamma", 2.0),
         )

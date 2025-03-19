@@ -107,7 +107,7 @@ class Trainer:
 
         # Create a single iterator and get n different batches from the validation set for visualization
         val_iter = iter(val_loader)
-        X_viz_list, y_viz_list = zip(*[next(val_iter) for _ in range(100)])
+        X_viz_list, y_viz_list = zip(*[next(val_iter) for _ in range(len(val_loader)//3)])
         X_viz = torch.cat(X_viz_list, dim=0).to(self.device)
         y_viz = torch.cat(y_viz_list, dim=0)
 
