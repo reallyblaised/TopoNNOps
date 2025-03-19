@@ -61,9 +61,12 @@ class LHCbMCModule:
 
         # Calculate samples to take
         n_background = int(len(background) * scale_factor)
-        n_signal = int(
-            n_background * ratio
-        )  # Maintains minbias:<individual signal channel> ratio
+        if ratio: 
+            n_signal = int(
+                n_background * ratio
+            )  # Maintains minbias:<individual signal channel> ratio
+        else:
+            n_signal = len(signal)
 
         # Sample the data
         background_sample = background.sample(n=n_background)

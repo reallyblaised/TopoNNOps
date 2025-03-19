@@ -105,9 +105,9 @@ class Trainer:
         best_val_loss = float("inf")
         patience_counter = 0
 
-        # Create a single iterator and get 10 different batches from the validation set for visualization
+        # Create a single iterator and get n different batches from the validation set for visualization
         val_iter = iter(val_loader)
-        X_viz_list, y_viz_list = zip(*[next(val_iter) for _ in range(10)])
+        X_viz_list, y_viz_list = zip(*[next(val_iter) for _ in range(100)])
         X_viz = torch.cat(X_viz_list, dim=0).to(self.device)
         y_viz = torch.cat(y_viz_list, dim=0)
 
@@ -253,7 +253,6 @@ class Trainer:
     ) -> None:
         """Generate and log visualizations"""
         self.performance.create_performance_dashboard(
-            X_viz.cpu().numpy(), y_viz.numpy(), 
             X_viz.cpu().numpy(), y_viz.numpy(), 
             history, epoch
         )

@@ -105,13 +105,13 @@ metrics:
     recall: true
     f1: true
 
-
 training:
   training_data_scale_factor: 1.0
-  sb_ratio: 1.0
-  num_epochs: 10
+  sb_ratio: ~
+  num_epochs: 15
   batch_size: 128
   loss_fn: "bce_with_logits"
+  # loss_fn: "focal"  # Options: bce_with_logits, focal
 
 paths:
   train_data: "/ceph/submit/data/user/b/blaised/hlt2topo_sp/scratch/TwoBody/preprocessed/train.pkl"
