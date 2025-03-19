@@ -3,20 +3,57 @@ from omegaconf import DictConfig
 import torch
 import torch.nn as nn
 import mlflow
-from models import UnconstrainedNet
+from models import UnconstrainedNet, LipschitzNet
 from trainer import Trainer
 from data import LHCbMCModule
 import logging
-from typing import Union
+from typing import Union, List
 from loss import FocalLoss
 
 
-def get_model(cfg: DictConfig, input_dim: int) -> nn.Module:
+def get_model(cfg: DictConfig, input_dim: int, feature_names: List[str]) -> nn.Module:
     """Create model based on configuration"""
-    if cfg.architecture == "unconstrained":
-        return UnconstrainedNet(**dict(cfg.model))
+    # Check the selected architecture type
+    architecture = cfg.model.identifier.lower()
+    
+    # For unconstrained models
+    if architecture == "unconstrained":
+        model_params = dict(cfg.model)
+        model_params.pop('identifier', None)  # Removes 'identifier' if it exists as not strictly architectural
+        return UnconstrainedNet(
+            input_dim=input_dim,
+            **model_params
+        )
+            
+    # For Lipschitz-constrained models (with or without monotonicity)
+    elif architecture in ["lipschitz", "lipschitz_monotonic"]:
+        # Get model configuration
+        lip_const = cfg.model.get("lip_const", 1.0)
+        nbody = cfg.model.get("nbody", "TwoBody")
+        
+        # Determine if we use monotonicity constraints - can come from either:
+        # 1. The architecture name (lipschitz_monotonic)
+        # 2. The model config (monotonic: true)
+        monotonic = (architecture == "lipschitz_monotonic" or 
+                     cfg.model.get("monotonic", False))
+        
+        return LipschitzNet(
+            input_dim=input_dim,
+            layer_dims=cfg.model.layer_dims,
+            lip_const=lip_const,
+            monotonic=monotonic,
+            nbody=nbody,
+            feature_names=feature_names,
+            features_config_path=cfg.features_config_path,
+            activation_fn=cfg.model.get("activation_fn", "groupsort"),
+            dropout_rate=cfg.model.get("dropout_rate", 0.0),
+            batch_norm=cfg.model.get("batch_norm", False),
+            l1_factor=cfg.model.get("l1_factor", 0.0)
+        )
+    
+    # Unknown architecture
     else:
-        raise ValueError(f"Unsupported model architecture: {cfg.architecture}")
+        raise ValueError(f"Unsupported model architecture: {architecture}")
 
 
 def get_optimizer(cfg: DictConfig, model: nn.Module) -> torch.optim.Optimizer:
@@ -87,7 +124,7 @@ def get_criterion(cfg: DictConfig) -> nn.Module:
 def main(cfg: DictConfig) -> None:
     # Setup logging
     logger = logging.getLogger(__name__)
-
+  
     # MLflow experiment setup
     try:
         mlflow.set_tracking_uri(cfg.mlflow.tracking_uri)
@@ -101,12 +138,22 @@ def main(cfg: DictConfig) -> None:
     except Exception as e:
         logger.warning(f"MLflow setup failed: {str(e)}. Training will continue without tracking.")
 
-
     with mlflow.start_run():
+        # Log key configuration parameters
+        logger.info(f"Running with architecture: {cfg.model.identifier}")
+        logger.info(f"Using model configuration: {cfg.model}")
+        logger.info(f"Training configuration: {cfg.training}")
+
+        # Log model architecture to MLflow for dashboarding
+        mlflow.log_param("architecture", cfg.model.identifier)
+        
         # Log all configurations
-        mlflow.log_params(dict(cfg.model))
-        mlflow.log_params(dict(cfg.optimizer))
-        mlflow.log_params(dict(cfg.training))
+        for section in ["model", "optimizer", "training"]:
+            if hasattr(cfg, section):
+                for key, value in dict(getattr(cfg, section)).items():
+                    # Skip complex nested structures
+                    if not isinstance(value, (dict, list)) or isinstance(value, (str, int, float, bool)):
+                        mlflow.log_param(f"{section}.{key}", value)
 
         # Setup device
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -117,15 +164,17 @@ def main(cfg: DictConfig) -> None:
             data_module = LHCbMCModule(cfg.paths.train_data, cfg.paths.test_data)
             data_module.setup(
                 batch_size=cfg.training.batch_size,
-                scale_factor=cfg.training.get(
-                    "training_data_scale_factor", 1.0
-                ),  # how much training data is read in
-                ratio=cfg.training.get("sb_ratio", 0.01),  # minbias:signal ratio
+                scale_factor=cfg.training.get("training_data_scale_factor", 1.0),
+                ratio=cfg.training.get("sb_ratio", 0.01),
             )
+            
+            logger.info(f"Input features: {data_module.feature_cols}")
+            logger.info(f"Input dimension: {data_module.input_dim}")
 
             # Create model
-            model = get_model(cfg, data_module.get_n_features())
+            model = get_model(cfg, data_module.input_dim, data_module.feature_cols)
             model = model.to(device)
+            logger.info(f"Model created: {model}")
 
             # Setup training components
             optimizer = get_optimizer(cfg, model)
@@ -150,9 +199,7 @@ def main(cfg: DictConfig) -> None:
                 val_loader=data_module.test_loader,
                 num_epochs=cfg.training.num_epochs,
                 metrics_cfg=cfg.metrics,
-                early_stopping_patience=cfg.training.get(
-                    "early_stopping_patience", None
-                ),
+                early_stopping_patience=cfg.training.get("early_stopping_patience", None),
             )
 
             # Log final metrics

@@ -1,0 +1,10 @@
+identifier: "unconstrained" # Identifier for the model configuration for logging and bookeeping
+
+# Default model configuration
+layer_dims: [32, 64, 128, 64, 32] # hidden layer dimensions
+dropout_rate: 0.0
+batch_norm: false
+activation_fn: "leaky_relu"
+l1_factor: 0.0
+residual: false
+init_method: "xavier_uniform"

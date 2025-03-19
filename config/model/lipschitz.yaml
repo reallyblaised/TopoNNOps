@@ -1,0 +1,16 @@
+identifier: lipschitz # Identifier for the model configuration for logging and bookeeping
+
+# hidden layer dimensions
+layer_dims: [32, 64, 32]
+
+# Lipschitz-specific parameters
+activation_fn: "groupsort"
+lip_const: 1.0
+nbody: "TwoBody"
+
+# Regular parameters
+dropout_rate: 0.0
+batch_norm: false
+l1_factor: 0.0
+residual: false
+init_method: "xavier_uniform"
