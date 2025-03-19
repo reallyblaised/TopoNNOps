@@ -9,7 +9,7 @@ import numpy as np
 from omegaconf import DictConfig
 from tqdm import tqdm
 import time
-from visualization import ModelPerformance as ModelInterpretability
+from visualization import ModelPerformance
 from weight_visualization import WeightVisualizer
 from sklearn.metrics import (
     roc_auc_score,
@@ -43,7 +43,7 @@ class Trainer:
         self.scaler = GradScaler() if self.use_mixed_precision else None
 
         # Initialize visualization tools
-        self.interpretability = ModelInterpretability(
+        self.performance = ModelPerformance(
             model=model, feature_names=feature_names, device=device
         )
         self.weight_viz = WeightVisualizer(model=model, feature_names=feature_names)
@@ -105,9 +105,11 @@ class Trainer:
         best_val_loss = float("inf")
         patience_counter = 0
 
-        # Get sample batch for visualizations
-        X_viz, y_viz = next(iter(val_loader))
-        X_viz = X_viz.to(self.device)
+        # Create a single iterator and get 10 different batches from the validation set for visualization
+        val_iter = iter(val_loader)
+        X_viz_list, y_viz_list = zip(*[next(val_iter) for _ in range(10)])
+        X_viz = torch.cat(X_viz_list, dim=0).to(self.device)
+        y_viz = torch.cat(y_viz_list, dim=0)
 
         for epoch in range(num_epochs):
             epoch_start_time = time.time()
@@ -250,8 +252,10 @@ class Trainer:
         epoch: int,
     ) -> None:
         """Generate and log visualizations"""
-        self.interpretability.create_performance_dashboard(
-            X_viz.cpu().numpy(), y_viz.numpy(), history, epoch
+        self.performance.create_performance_dashboard(
+            X_viz.cpu().numpy(), y_viz.numpy(), 
+            X_viz.cpu().numpy(), y_viz.numpy(), 
+            history, epoch
         )
         # self.weight_viz.create_weight_dashboard(X_viz, epoch)
 
