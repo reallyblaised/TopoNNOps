@@ -143,11 +143,12 @@ class ModelPerformance:
         fpr, tpr, thresholds = roc_curve(y_true, y_pred.ravel())
         roc_auc = auc(fpr, tpr)
         
-        # Create DataFrame
+        # Create DataFrame - ensure all arrays have the same length
+        # The ROC curve returns one more point in fpr, tpr than there are thresholds
         df = pd.DataFrame({
             'False Positive Rate': fpr,
             'True Positive Rate': tpr,
-            'Threshold': np.append(thresholds, 0)  # Add extra threshold for last point
+            'Threshold': np.append(thresholds, [thresholds[-1]])  # Duplicate the last threshold instead of using 0
         })
         
         # Create ROC curve
@@ -192,11 +193,12 @@ class ModelPerformance:
         precision, recall, thresholds = precision_recall_curve(y_true, y_pred.ravel())
         avg_precision = average_precision_score(y_true, y_pred.ravel())
         
-        # Create DataFrame
+        # Create DataFrame - ensure lengths match
+        # precision_recall_curve returns one more point in precision and recall than there are thresholds
         df = pd.DataFrame({
             'Recall': recall,
             'Precision': precision,
-            'Threshold': np.append(thresholds, 1.0)  # Add threshold=1.0 for first point
+            'Threshold': np.append(thresholds, [1.0])  # Add threshold=1.0 for last point
         })
         
         # Create PR curve
