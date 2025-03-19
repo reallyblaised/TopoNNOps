@@ -83,7 +83,7 @@ def get_criterion(cfg: DictConfig) -> nn.Module:
         raise ValueError(f"Unsupported loss function: {loss_fn}")
 
 
-@hydra.main(config_path="config", config_name="config")
+@hydra.main(config_path="config", config_name="config", version_base="1.2")
 def main(cfg: DictConfig) -> None:
     # Setup logging
     logger = logging.getLogger(__name__)

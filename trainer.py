@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.cuda.amp import GradScaler, autocast
+from torch.cuda.amp import GradScaler
 from torch.utils.data import DataLoader
 import mlflow
 from typing import Dict, List, Optional, Tuple
@@ -58,7 +58,7 @@ class Trainer:
         self.optimizer.zero_grad()
 
         # Forward pass with optional mixed precision
-        with autocast(enabled=self.use_mixed_precision):
+        with torch.autocast(self.device.type, enabled=self.use_mixed_precision):
             outputs = self.model(X)
             loss = self.criterion(outputs, y.unsqueeze(1))
 
@@ -190,7 +190,7 @@ class Trainer:
             for X, y in val_loader:
                 X, y = X.to(self.device), y.to(self.device)
 
-                with autocast(enabled=self.use_mixed_precision):
+                with torch.autocast(self.device.type, enabled=self.use_mixed_precision):
                     outputs = self.model(X)
                     loss = self.criterion(outputs, y.unsqueeze(1))
                     val_losses.append(loss.item())

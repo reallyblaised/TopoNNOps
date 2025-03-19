@@ -115,6 +115,6 @@ class LHCbMCModule:
             train_dataset, batch_size=batch_size, shuffle=True
         )
         self.test_loader = DataLoader(
-            test_dataset, batch_size=batch_size, shuffle=False
-        )  # reproducibility and consistency across experiments
+            test_dataset, batch_size=batch_size, shuffle=True
+        )  # shuffling aids the inclusion of both classes in each batch
         self.input_dim = len(self.feature_cols)
