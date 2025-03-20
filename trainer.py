@@ -174,7 +174,7 @@ class Trainer:
 
             # Early stopping check
             if early_stopping_patience:
-                if e val_metrics["loss"] < best_val_loss:
+                if eval_metrics["loss"] < best_val_loss:
                     best_val_loss = eval_metrics["loss"]
                     patience_counter = 0
                     self._save_checkpoint(epoch, eval_metrics)
@@ -274,12 +274,12 @@ class Trainer:
             else:
                 # Approach 2: Create a new loader with the same X_viz data
                 # This is a fallback approach when we don't have the indices
-                logger.warning("Using simplified channel matching approach - results may be approximate")
+                print("Using simplified channel matching approach - results may be approximate")
                 # Get a subset of channels of the same length as X_viz
                 if len(self.data_module.test_channels) >= len(X_viz):
                     channels = self.data_module.test_channels[:len(X_viz)]
                 else:
-                    logger.warning(f"Channel data insufficient: test_channels={len(self.data_module.test_channels)}, X_viz={len(X_viz)}")
+                    print(f"Channel data insufficient: test_channels={len(self.data_module.test_channels)}, X_viz={len(X_viz)}")
         
         # Generate visualizations
         self.performance.create_performance_dashboard(
