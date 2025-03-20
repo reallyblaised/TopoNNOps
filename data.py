@@ -77,6 +77,23 @@ class LHCbMCModule:
 
         return train_data
 
+    def get_channel_information(self, dataset_type='test'):
+        """
+        Get channel information for training or test dataset.
+        
+        Args:
+            dataset_type: 'train' or 'test' to specify which dataset
+            
+        Returns:
+            Array of channel labels
+        """
+        if dataset_type == 'train':
+            data = pd.read_pickle(self.train_path)
+        else:  # test
+            data = pd.read_pickle(self.test_path)
+        
+        return data["channel"].values
+
     def setup(
         self, batch_size: int = 128, scale_factor: float = 1.0, ratio: float = 0.1
     ):
@@ -93,6 +110,10 @@ class LHCbMCModule:
             ratio=ratio,
         )
 
+        # Store the channel information
+        self.train_channels = train_data["channel"].values
+        self.test_channels = test_data["channel"].values
+        
         # fetch the features
         self.feature_cols = [feat for feat in self.feature_config().keys()]
         assert len(self.feature_cols) > 0, "No features found in the config file"

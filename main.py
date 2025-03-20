@@ -199,6 +199,9 @@ def main(cfg: DictConfig) -> None:
                 grad_clip_val=cfg.training.get("grad_clip_val", None),
                 use_mixed_precision=cfg.training.get("use_mixed_precision", False),
             )
+            
+            # Provide access to the data module for channel information
+            trainer.data_module = data_module
 
             # Train the model
             history = trainer.train(

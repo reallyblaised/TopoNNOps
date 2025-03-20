@@ -107,7 +107,18 @@ class Trainer:
 
         # Create a single iterator and get n different batches from the validation set for visualization
         val_iter = iter(val_loader)
-        X_viz_list, y_viz_list = zip(*[next(val_iter) for _ in range(len(val_loader)//3)])
+        X_viz_list, y_viz_list = [], []
+        
+        # Use a subset of validation data for visualization
+        num_viz_batches = min(len(val_loader)//3, 10)  # Limit to avoid using too much memory
+        for _ in range(num_viz_batches):
+            try:
+                X_batch, y_batch = next(val_iter)
+                X_viz_list.append(X_batch)
+                y_viz_list.append(y_batch)
+            except StopIteration:
+                break
+                
         X_viz = torch.cat(X_viz_list, dim=0).to(self.device)
         y_viz = torch.cat(y_viz_list, dim=0)
 
@@ -163,7 +174,7 @@ class Trainer:
 
             # Early stopping check
             if early_stopping_patience:
-                if eval_metrics["loss"] < best_val_loss:
+                if e val_metrics["loss"] < best_val_loss:
                     best_val_loss = eval_metrics["loss"]
                     patience_counter = 0
                     self._save_checkpoint(epoch, eval_metrics)
@@ -252,9 +263,29 @@ class Trainer:
         epoch: int,
     ) -> None:
         """Generate and log visualizations"""
+        channels = None
+        
+        # Get channel information for the visualization subset
+        if hasattr(self, 'data_module') and hasattr(self.data_module, 'test_channels'):
+            # Approach 1: If we have the validation indices used to create X_viz
+            if hasattr(self, 'viz_indices'):
+                # Use the stored indices to get the corresponding channels
+                channels = self.data_module.test_channels[self.viz_indices]
+            else:
+                # Approach 2: Create a new loader with the same X_viz data
+                # This is a fallback approach when we don't have the indices
+                logger.warning("Using simplified channel matching approach - results may be approximate")
+                # Get a subset of channels of the same length as X_viz
+                if len(self.data_module.test_channels) >= len(X_viz):
+                    channels = self.data_module.test_channels[:len(X_viz)]
+                else:
+                    logger.warning(f"Channel data insufficient: test_channels={len(self.data_module.test_channels)}, X_viz={len(X_viz)}")
+        
+        # Generate visualizations
         self.performance.create_performance_dashboard(
             X_viz.cpu().numpy(), y_viz.numpy(), 
-            history, epoch
+            history, epoch,
+            channels=channels
         )
         # self.weight_viz.create_weight_dashboard(X_viz, epoch)
 
