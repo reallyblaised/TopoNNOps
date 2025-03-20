@@ -122,6 +122,10 @@ class LHCbMCModule:
             feat in train_data.columns for feat in self.feature_cols
         ), f"Missing features in training data: {[feat for feat in self.feature_cols if feat not in train_data.columns]}"
 
+        # HACK: store the full datasets (not just the loaders) - to enable access to channel info for efficiency histograms in the performance dashboard
+        self.raw_train_data = train_data
+        self.raw_test_data = test_data
+        
         # prepare the relevant tensors
         X_train = torch.tensor(
             train_data[self.feature_cols].values, dtype=torch.float32
@@ -129,6 +133,12 @@ class LHCbMCModule:
         y_train = torch.tensor(train_data["class_label"].values, dtype=torch.float32)
         X_test = torch.tensor(test_data[self.feature_cols].values, dtype=torch.float32)
         y_test = torch.tensor(test_data["class_label"].values, dtype=torch.float32)
+        
+        # Store the tensors for direct access
+        self.X_train = X_train
+        self.y_train = y_train
+        self.X_test = X_test
+        self.y_test = y_test
 
         # put together the dataset
         train_dataset = TensorDataset(X_train, y_train)

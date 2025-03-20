@@ -200,7 +200,7 @@ def main(cfg: DictConfig) -> None:
                 use_mixed_precision=cfg.training.get("use_mixed_precision", False),
             )
             
-            # Provide access to the data module for channel information
+            # Provide access to the data module for visualization
             trainer.data_module = data_module
 
             # Train the model
