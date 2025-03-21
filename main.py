@@ -126,6 +126,50 @@ def get_criterion(cfg: DictConfig) -> nn.Module:
     else:
         raise ValueError(f"Unsupported loss function: {loss_fn}")
 
+def log_model_with_metadata(model, data_module, cfg):
+    """Log the model state dict to MLflow with detailed feature and class information"""
+    try:
+        # Extract feature names and constraints from data module
+        feature_names = data_module.feature_cols
+        
+        # Create metadata dictionary
+        metadata = {
+            # Feature information
+            "features": feature_names,
+            "feature_count": len(feature_names),
+            
+            # Class label definitions
+            "class_labels": {
+                "0": "No monotonicity requirement",
+                "1": "Monotonically increasing (at the partials)",
+            },
+            
+            # Feature constraints (if available)
+            "feature_constraints": data_module.feature_config(model=cfg.model.get("nbody", "TwoBody")),
+            
+            # Model architecture summary
+            "architecture": cfg.model.identifier,
+            "layer_dimensions": cfg.model.layer_dims,
+            "activation_function": cfg.model.get("activation_fn", "relu"),
+            
+            # Training information
+            "training_scale_factor": cfg.training.get("training_data_scale_factor", 1.0),
+            "signal_background_ratio": cfg.training.get("sb_ratio", 0.1),
+            "loss_function": cfg.training.get("loss_fn", "bce_with_logits")
+        }
+        
+        # Log model state dict instead of the full model
+        mlflow.log_dict(model.state_dict(), "model_state_dict.pth")
+        
+        # Log metadata as a separate artifact
+        mlflow.log_dict(metadata, "model_metadata.json")
+        
+        # Other logging code remains the same...
+        
+        return True
+    except Exception as e:
+        logging.error(f"Error logging model with metadata: {str(e)}")
+        return False
 
 @hydra.main(config_path="config", config_name="config", version_base="1.2")
 def main(cfg: DictConfig) -> None:
@@ -216,6 +260,21 @@ def main(cfg: DictConfig) -> None:
             final_metrics = history["eval_metrics"][-1]
             for metric_name, metric_value in final_metrics.items():
                 mlflow.log_metric(f"final_{metric_name}", metric_value)
+
+            # Log features and their constraints as individual parameters
+            feature_constraints = data_module.feature_config(model=cfg.model.get("nbody", "TwoBody"))
+            for feature_name, constraint_value in feature_constraints.items():
+                constraint_type = "monotonic_increasing" if constraint_value == 1 else "no_monotonicity"
+                mlflow.log_param(f"feature.{feature_name}", constraint_type)
+                
+            # Log class definitions as parameters
+            mlflow.log_param("class.0", "Background (minbias)")
+            mlflow.log_param("class.1", "Signal (beauty mesons)")
+            mlflow.log_param("constraint.0", "No monotonicity requirement")
+            mlflow.log_param("constraint.1", "Monotonically increasing (at the partials)")
+
+            # Log model with detailed metadata
+            log_model_with_metadata(model, data_module, cfg)
 
             logger.info("Training completed successfully!")
 
