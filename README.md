@@ -1,6 +1,7 @@
-# TopoNNOps: Neural Networks with Topological Constraints
+# TopoNNOps: optimising the Run 3 LHCb topological triggers 
 
-TopoNNOps is a framework for training neural networks with topological constraints such as Lipschitz continuity and monotonicity. The framework provides implementations of both standard unconstrained neural networks and constrained architectures.
+TopoNNOps is a framework for training and optimising neural networks for the identification and retention of beauty hadrons in real-time during Run 3 data taking of the LHCb experiment. The framework is designed to maximally flexible in 
+optimising both standard unconstrained and (monotonic) Lipschitz architectures.
 
 ## Features
 
