@@ -571,17 +571,18 @@ class ModelPerformance:
         return chart
 
     def _create_channel_efficiency_vs_pt(self, 
-                                    X: np.ndarray, 
-                                    y: np.ndarray, 
-                                    channels: np.ndarray,
-                                    y_pred: np.ndarray = None,
-                                    pt_values: np.ndarray = None, 
-                                    pt_index: int = None) -> alt.Chart:
+                                X: np.ndarray, 
+                                y: np.ndarray, 
+                                channels: np.ndarray,
+                                y_pred: np.ndarray = None,
+                                pt_values: np.ndarray = None, 
+                                pt_index: int = None) -> alt.Chart:
         """
         Create efficiency histograms in TwoBody_PT for specific signal channels.
         
         Shows efficiency at different cut values with uncertainty bands.
         Also displays minbias rejection rate for each cut value.
+        Includes normalized signal PT distribution as shaded background.
         
         Args:
             X: Feature matrix
@@ -622,8 +623,8 @@ class ModelPerformance:
         # Selected signal channels to analyze
         selected_channels = ['Bs_phiphi', 'Bp_KpJpsi', 'B0_Kpi', 'B0_D0pipi']
         
-        # Define PT bins from 
-        pt_bins = np.linspace(0, 30, 30)  
+        # Define PT bins from 0 to 20 GeV in 1 GeV increments
+        pt_bins = np.linspace(0, 20, 21)  # 21 points to get 20 bins of 1.0 GeV each
         
         # Compute minbias rejection for each cut value
         # Ensure all arrays have compatible shapes
@@ -649,6 +650,35 @@ class ModelPerformance:
         
         # Data structure to store efficiency results
         efficiency_data = []
+        
+        # Dictionary to store overall efficiency per channel per cut
+        overall_efficiencies = {}
+        
+        # Calculate overall efficiencies for each channel and cut value
+        for channel in selected_channels:
+            channel_mask = (channels == channel)
+            channel_total = np.sum(channel_mask)
+            
+            # Skip if no events in this channel
+            if channel_total == 0:
+                continue
+                
+            # Calculate overall efficiency for each cut
+            for cut in cut_values:
+                if channel not in overall_efficiencies:
+                    overall_efficiencies[channel] = {}
+                    
+                # Count signal events passing the cut
+                passing_cut = np.sum(channel_mask & (y_pred.ravel() >= cut))
+                
+                # Calculate overall efficiency
+                if channel_total > 0:
+                    overall_eff = passing_cut / channel_total
+                    overall_efficiencies[channel][cut] = {
+                        'efficiency': overall_eff,
+                        'passing': int(passing_cut),
+                        'total': int(channel_total)
+                    }
         
         # Calculate efficiency for each channel, cut value, and PT bin
         for channel in selected_channels:
@@ -709,6 +739,32 @@ class ModelPerformance:
                 text='message:N'
             ).properties(width=800, height=200)
         
+        # Create PT distribution data for all beauty channels combined
+        beauty_channels_mask = np.zeros_like(channels, dtype=bool)
+        for channel in selected_channels:
+            beauty_channels_mask |= (channels == channel)
+        
+        beauty_pt_values = pt_values[beauty_channels_mask]
+        
+        # Create histogram data
+        hist, bin_edges = np.histogram(beauty_pt_values, bins=pt_bins)
+        
+        # Normalize the histogram so that the tallest bin is 1.0
+        max_bin_height = np.max(hist)
+        if max_bin_height > 0:
+            hist = hist / max_bin_height
+        
+        # Create DataFrame for PT distribution
+        pt_dist_data = []
+        for i in range(len(hist)):
+            bin_center = (bin_edges[i] + bin_edges[i+1]) / 2
+            pt_dist_data.append({
+                'PT_Bin': bin_center,
+                'Normalized_Height': hist[i]
+            })
+        
+        pt_dist_df = pd.DataFrame(pt_dist_data)
+        
         # Create separate charts for each cut value
         cut_charts = []
         
@@ -718,61 +774,128 @@ class ModelPerformance:
             
             if len(cut_df) == 0:
                 continue
-                
-            # Create uncertainty band first (so it's drawn behind the points)
-            band = alt.Chart(cut_df).mark_area(opacity=0.3).encode(
-                x=alt.X('PT_Bin:Q'),
+            
+            # Create base chart for the PT bins
+            base = alt.Chart(pt_dist_df).encode(
+                x=alt.X('PT_Bin:Q', scale=alt.Scale(domain=[0, 20]), title='TwoBody_PT [GeV]')
+            )
+            
+            # Add the PT distribution as a gray shaded area
+            pt_area = base.mark_area(opacity=0.3, color='gray').encode(
+                y='Normalized_Height:Q'
+            )
+            
+            # Create base for efficiency plots
+            eff_base = alt.Chart(cut_df).encode(
+                x=alt.X('PT_Bin:Q')
+            )
+            
+            # Create uncertainty bands
+            bands = eff_base.mark_area(opacity=0.3).encode(
                 y=alt.Y('Efficiency_lower:Q'),
                 y2=alt.Y2('Efficiency_upper:Q'),
+                color=alt.Color('Channel:N', scale=alt.Scale(scheme='category10'))
+            )
+            
+            # Create lines connecting the points
+            lines = eff_base.mark_line().encode(
+                y=alt.Y('Efficiency:Q', title='Efficiency', scale=alt.Scale(domain=[0, 1])),
                 color=alt.Color('Channel:N')
             )
             
-            # Create data points (filled dots instead of rings)
-            points = alt.Chart(cut_df).mark_circle(size=50, filled=True).encode(
-                x=alt.X('PT_Bin:Q', title='TwoBody_PT [GeV]', scale=alt.Scale(domain=[0, 20])),
-                y=alt.Y('Efficiency:Q', title='Efficiency', scale=alt.Scale(domain=[0, 1])),
-                color=alt.Color('Channel:N', scale=alt.Scale(scheme='category10')),
+            # Create points
+            points = eff_base.mark_circle(size=50).encode(
+                y=alt.Y('Efficiency:Q'),
+                color=alt.Color('Channel:N'),
                 tooltip=['Channel:N', 'PT_Bin:Q', 'Efficiency:Q', 'Error:Q', 
                         'TotalEvents:Q', 'PassingEvents:Q']
             )
             
-            # Create connecting lines
-            lines = alt.Chart(cut_df).mark_line().encode(
-                x=alt.X('PT_Bin:Q'),
-                y=alt.Y('Efficiency:Q'),
-                color=alt.Color('Channel:N')
-            )
+            # Add minbias rejection and channel efficiency text
+            text_data = []
             
-            # Add minbias rejection text
-            rejection_text = alt.Chart(pd.DataFrame([{
-                'x': 17,  # Position in the right part of the chart
-                'y': 0.1,
-                'text': f"Minbias rejection: {minbias_rejection[cut]:.4f}"
-            }])).mark_text(align='right', fontSize=12).encode(
+            # First, add minbias rejection
+            text_data.append({
+                'x': 10,
+                'y': 0.08,
+                'text': f"Minbias rejection: {minbias_rejection[cut]:.4f}",
+                'channel': 'Minbias'
+            })
+            
+            # Then add efficiency for each channel
+            y_position = 0.15
+            for channel in selected_channels:
+                if channel in overall_efficiencies and cut in overall_efficiencies[channel]:
+                    eff_info = overall_efficiencies[channel][cut]
+                    text_data.append({
+                        'x': 10,
+                        'y': y_position,
+                        'text': f"{channel}: {eff_info['efficiency']:.4f} ({eff_info['passing']}/{eff_info['total']})",
+                        'channel': channel
+                    })
+                    y_position += 0.05
+            
+            # Create text marks with very small font size
+            text_marks = alt.Chart(pd.DataFrame(text_data)).mark_text(
+                align='center',
+                baseline='middle',
+                fontSize=8  # Very small font size
+            ).encode(
                 x='x:Q',
                 y='y:Q',
-                text='text:N'
+                text='text:N',
+                color=alt.condition(
+                    alt.datum.channel == 'Minbias',
+                    alt.value('black'),
+                    alt.Color('channel:N', scale=alt.Scale(scheme='category10'))
+                )
             )
             
             # Combine all elements
-            chart = (band + lines + points + rejection_text).properties(
+            combined_chart = alt.layer(
+                pt_area,
+                bands,
+                lines,
+                points,
+                text_marks
+            ).properties(
                 width=400,
-                height=250,
+                height=300,
                 title=f'Channel Efficiency vs PT (Cut = {cut})'
             )
             
-            cut_charts.append(chart)
+            cut_charts.append(combined_chart)
         
         # Combine all cut charts into a single view
         if cut_charts:
-            return alt.vconcat(
-                alt.hconcat(cut_charts[0], cut_charts[1]).resolve_scale(color='shared') 
-                if len(cut_charts) > 1 else cut_charts[0],
-                alt.hconcat(cut_charts[2], cut_charts[3]).resolve_scale(color='shared')
-                if len(cut_charts) > 3 else (cut_charts[2] if len(cut_charts) > 2 else alt.Chart()),
-            ).resolve_scale(color='shared').properties(
-                title='Signal Channel Efficiency vs PT with Uncertainty Bands'
+            # Create title for overall chart
+            title_chart = alt.Chart(pd.DataFrame([{'text': 'Signal Channel Efficiency vs PT with Uncertainty Bands'}])).mark_text(
+                fontSize=16,
+                font='Arial',
+                fontWeight='bold'
+            ).encode(
+                text='text:N'
             )
+            
+            # Arrange charts in a 2x2 grid
+            if len(cut_charts) >= 4:
+                final_chart = alt.vconcat(
+                    alt.hconcat(cut_charts[0], cut_charts[1]).resolve_scale(color='shared'),
+                    alt.hconcat(cut_charts[2], cut_charts[3]).resolve_scale(color='shared')
+                ).resolve_scale(color='shared')
+            elif len(cut_charts) == 3:
+                final_chart = alt.vconcat(
+                    alt.hconcat(cut_charts[0], cut_charts[1]).resolve_scale(color='shared'),
+                    cut_charts[2]
+                ).resolve_scale(color='shared')
+            elif len(cut_charts) == 2:
+                final_chart = alt.hconcat(
+                    cut_charts[0], cut_charts[1]
+                ).resolve_scale(color='shared')
+            else:
+                final_chart = cut_charts[0]
+            
+            return alt.vconcat(title_chart, final_chart).resolve_scale(color='shared')
         else:
             return alt.Chart(pd.DataFrame({'message': ['No efficiency data available']})).mark_text().encode(
                 text='message:N'
