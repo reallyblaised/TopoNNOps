@@ -622,8 +622,8 @@ class ModelPerformance:
         # Selected signal channels to analyze
         selected_channels = ['Bs_phiphi', 'Bp_KpJpsi', 'B0_Kpi', 'B0_D0pipi']
         
-        # Define PT bins from 0 to 20 GeV
-        pt_bins = np.linspace(0, 20, 21)  # 1 GeV bins
+        # Define PT bins from 
+        pt_bins = np.linspace(0, 30, 30)  
         
         # Compute minbias rejection for each cut value
         # Ensure all arrays have compatible shapes
