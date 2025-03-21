@@ -42,12 +42,11 @@ class ModelPerformance:
         y_test_pred = self._get_predictions(X_test)
         
         # Validate dimensions of our data
-        print(f"Visualization data shapes - X: {X_test.shape}, y: {y_test.shape}, preds: {y_test_pred.shape}")
         if channels is not None:
-            print(f"Channels array shape: {channels.shape}")
             if len(channels) != len(X_test):
                 print(f"WARNING: Channel length mismatch. Channels: {len(channels)}, X: {len(X_test)}")
                 # Take the smaller length to avoid index errors
+                breakpoint()
                 min_len = min(len(channels), len(X_test))
                 channels = channels[:min_len]
                 X_test = X_test[:min_len]
@@ -63,13 +62,15 @@ class ModelPerformance:
         roc_curve_chart = self._create_roc_curve(y_test, y_test_pred)
         pr_curve_chart = self._create_pr_curve(y_test, y_test_pred)
         response_distribution = self._create_response_distribution(y_test, y_test_pred)
+        correlation_matrices = self._create_feature_correlation_matrices(X_test, y_test)
         
         # Create standard dashboard components
         dashboard_components = [
             alt.hconcat(learning_chart, metrics_chart).resolve_scale(color='independent'),
             alt.hconcat(feature_importance, confusion_matrix).resolve_scale(color='independent'),
             alt.hconcat(roc_curve_chart, pr_curve_chart).resolve_scale(color='independent'),
-            alt.hconcat(response_distribution).resolve_scale(color='independent')
+            alt.hconcat(response_distribution).resolve_scale(color='independent'),
+            correlation_matrices  # Add correlation matrices to dashboard
         ]
         
         # Add efficiency vs PT histogram if channel information is available
@@ -207,56 +208,106 @@ class ModelPerformance:
         return chart
 
     def _create_confusion_matrix(self, y_true: np.ndarray, y_pred: np.ndarray) -> alt.Chart:
-        """Create a simple confusion matrix visualization"""
+        """Create an improved confusion matrix visualization with sanity checks"""
         # Apply threshold for binary prediction
         y_pred_binary = (y_pred > 0.5).astype(int)
         
-        # Calculate confusion matrix
-        tn = np.sum((y_true == 0) & (y_pred_binary == 0))
-        fp = np.sum((y_true == 0) & (y_pred_binary == 1))
-        fn = np.sum((y_true == 1) & (y_pred_binary == 0))
-        tp = np.sum((y_true == 1) & (y_pred_binary == 1))
+        # Ensure arrays are properly flattened
+        y_true_flat = y_true.ravel()
+        y_pred_flat = y_pred_binary.ravel()
         
-        # Format as DataFrame for visualization
+        # Calculate confusion matrix
+        tn = np.sum((y_true_flat == 0) & (y_pred_flat == 0))
+        fp = np.sum((y_true_flat == 0) & (y_pred_flat == 1))
+        fn = np.sum((y_true_flat == 1) & (y_pred_flat == 0))
+        tp = np.sum((y_true_flat == 1) & (y_pred_flat == 1))
+        
+        # # Print debugging info to logs
+        # print(f"Confusion Matrix Raw Counts: TN={tn}, FP={fp}, FN={fn}, TP={tp}")
+        
+        # Total number of samples
+        total = tn + fp + fn + tp
+        
+        # Format as DataFrame for visualization with global normalization
         cm_data = [
-            {'Predicted': 'Negative', 'Actual': 'Negative', 'Count': int(tn), 'Normalized': float(tn) / float(tn + fp) if (tn + fp) > 0 else 0},
-            {'Predicted': 'Positive', 'Actual': 'Negative', 'Count': int(fp), 'Normalized': float(fp) / float(tn + fp) if (tn + fp) > 0 else 0},
-            {'Predicted': 'Negative', 'Actual': 'Positive', 'Count': int(fn), 'Normalized': float(fn) / float(fn + tp) if (fn + tp) > 0 else 0},
-            {'Predicted': 'Positive', 'Actual': 'Positive', 'Count': int(tp), 'Normalized': float(tp) / float(fn + tp) if (fn + tp) > 0 else 0}
+            {'Predicted': 'Negative', 'Actual': 'Negative', 'Count': int(tn), 'Normalized': float(tn) / float(total)},
+            {'Predicted': 'Positive', 'Actual': 'Negative', 'Count': int(fp), 'Normalized': float(fp) / float(total)},
+            {'Predicted': 'Negative', 'Actual': 'Positive', 'Count': int(fn), 'Normalized': float(fn) / float(total)},
+            {'Predicted': 'Positive', 'Actual': 'Positive', 'Count': int(tp), 'Normalized': float(tp) / float(total)}
         ]
+        
+        # # Double check that the DataFrame was constructed correctly
+        # print("DataFrame construction verification:")
+        # for item in cm_data:
+        #     print(f"  {item['Actual']} / {item['Predicted']}: {item['Count']}")
         
         df = pd.DataFrame(cm_data)
         
-        # Calculate metrics
-        accuracy = accuracy_score(y_true, y_pred_binary)
-        precision = precision_score(y_true, y_pred_binary, zero_division=0)
-        recall = recall_score(y_true, y_pred_binary, zero_division=0)
-        f1 = f1_score(y_true, y_pred_binary, zero_division=0)
+        # Calculate metrics using sklearn functions (Method 1)
+        accuracy_sklearn = accuracy_score(y_true_flat, y_pred_flat)
+        precision_sklearn = precision_score(y_true_flat, y_pred_flat, zero_division=0)
+        recall_sklearn = recall_score(y_true_flat, y_pred_flat, zero_division=0)
+        f1_sklearn = f1_score(y_true_flat, y_pred_flat, zero_division=0)
+        
+        # print(f"Sklearn metrics: Acc={accuracy_sklearn:.3f}, Prec={precision_sklearn:.3f}, Rec={recall_sklearn:.3f}, F1={f1_sklearn:.3f}")
+        
+        # Calculate metrics manually from confusion matrix (Method 2)
+        accuracy_manual = (tp + tn) / (tp + tn + fp + fn) if (tp + tn + fp + fn) > 0 else 0
+        precision_manual = tp / (tp + fp) if (tp + fp) > 0 else 0
+        recall_manual = tp / (tp + fn) if (tp + fn) > 0 else 0
+        f1_manual = 2 * (precision_manual * recall_manual) / (precision_manual + recall_manual) if (precision_manual + recall_manual) > 0 else 0
+        
+        # print(f"Manual metrics: Acc={accuracy_manual:.3f}, Prec={precision_manual:.3f}, Rec={recall_manual:.3f}, F1={f1_manual:.3f}")
+        
+        # Sanity check - verify metrics match between the two calculation methods
+        metrics_match = {
+            'accuracy': np.isclose(accuracy_sklearn, accuracy_manual, atol=1e-5),
+            'precision': np.isclose(precision_sklearn, precision_manual, atol=1e-5),
+            'recall': np.isclose(recall_sklearn, recall_manual, atol=1e-5),
+            'f1': np.isclose(f1_sklearn, f1_manual, atol=1e-5)
+        }
+        
+        # Additional sanity checks for confusion matrix consistency
+        # These should always be true if the confusion matrix is calculated correctly
+        matrix_total_check = (tn + fp + fn + tp) == len(y_true_flat)
+        pred_total_check = np.sum(y_pred_flat) == (tp + fp)
+        actual_total_check = np.sum(y_true_flat) == (tp + fn)
+        
+        # # Deep verification of matrix construction
+        cross_check = (
+            f"Matrix Totals: {tn+fp+fn+tp}, Expected: {len(y_true_flat)}\n"
+            f"Predicted Pos: {tp+fp}, Sum(y_pred==1): {np.sum(y_pred_flat)}\n"
+            f"Actual Pos: {tp+fn}, Sum(y_true==1): {np.sum(y_true_flat)}"
+        )
+        # print(cross_check)
         
         # Create heatmap
         base = alt.Chart(df).encode(
-            x=alt.X('Predicted:N', title='Predicted Class'),
-            y=alt.Y('Actual:N', title='Actual Class')
+            x=alt.X('Predicted:N', title='Predicted Class', sort=['Negative', 'Positive']),
+            y=alt.Y('Actual:N', title='Actual Class', sort=['Negative', 'Positive'])
         )
         
+        # Create heatmap with global normalization
         heatmap = base.mark_rect().encode(
-            color=alt.Color('Normalized:Q', scale=alt.Scale(scheme='blues'), title='Fraction of Actual')
+            color=alt.Color('Normalized:Q', 
+                        scale=alt.Scale(scheme='blues'), 
+                        title='Fraction of Total')
         )
         
         text = base.mark_text(baseline='middle').encode(
             text='Count:Q',
             color=alt.condition(
-                alt.datum.Normalized > 0.5,
+                alt.datum.Normalized > 0.3,  # Adjusted threshold for better readability
                 alt.value('white'),
                 alt.value('black')
             )
         )
         
-        # Add metrics as text
+        # Add overall metrics as text
         metrics_text = alt.Chart(pd.DataFrame([{
             'x': 0.5,
             'y': -0.1,
-            'text': f"Accuracy: {accuracy:.3f} | Precision: {precision:.3f} | Recall: {recall:.3f} | F1: {f1:.3f}"
+            'text': f"Accuracy: {accuracy_manual:.3f} | Precision: {precision_manual:.3f} | Recall: {recall_manual:.3f} | F1: {f1_manual:.3f}"
         }])).mark_text(
             align='center',
             baseline='top',
@@ -267,14 +318,76 @@ class ModelPerformance:
             text='text:N'
         )
         
+        # Add false positive rate and true positive rate
+        fpr = fp / (fp + tn) if (fp + tn) > 0 else 0
+        tpr = tp / (tp + fn) if (tp + fn) > 0 else 0
+        
+        rates_text = alt.Chart(pd.DataFrame([{
+            'x': 0.5,
+            'y': -0.2,
+            'text': f"FPR: {fpr:.3f} | TPR: {tpr:.3f} | Total samples: {total}"
+        }])).mark_text(
+            align='center',
+            baseline='top',
+            fontSize=12
+        ).encode(
+            x=alt.value(200),  # Center in the visualization
+            y=alt.value(280),  # Below the previous metrics
+            text='text:N'
+        )
+        
+        # Add more detailed calculations
+        class_sizes_text = alt.Chart(pd.DataFrame([{
+            'x': 0.5,
+            'y': -0.25,
+            'text': f"Actual Class Sizes - Negative: {int(tn+fp)} | Positive: {int(tp+fn)}"
+        }])).mark_text(
+            align='center',
+            baseline='top',
+            fontSize=12
+        ).encode(
+            x=alt.value(200),
+            y=alt.value(310),
+            text='text:N'
+        )
+        
+        # Add sanity check information
+        sanity_checks = []
+        
+        # Check if metrics match between sklearn and manual calculation
+        for metric, matches in metrics_match.items():
+            status = "✓" if matches else "✗"
+            sanity_checks.append(f"{metric.capitalize()}: {status}")
+        
+        # Check if confusion matrix is consistent with data
+        matrix_status = "✓" if matrix_total_check else "✗"
+        pred_status = "✓" if pred_total_check else "✗" 
+        actual_status = "✓" if actual_total_check else "✗"
+        
+        sanity_text = alt.Chart(pd.DataFrame([{
+            'x': 0.5,
+            'y': -0.3,
+            'text': f"Sanity checks: {', '.join(sanity_checks)} | Matrix consistency: {matrix_status}"
+        }])).mark_text(
+            align='center',
+            baseline='top',
+            fontSize=12,
+            color='green' if all(metrics_match.values()) and matrix_total_check else 'red'
+        ).encode(
+            x=alt.value(200),  # Center in the visualization
+            y=alt.value(340),  # Below the previous metrics
+            text='text:N'
+        )
+        
         # Combine elements
         matrix = (heatmap + text).properties(
             width=400,
             height=250,
-            title='Confusion Matrix'
+            title='Confusion Matrix (Globally Normalized)'
         )
         
-        return alt.vconcat(matrix, metrics_text).resolve_scale()
+        #return alt.vconcat(matrix, metrics_text, rates_text, class_sizes_text, sanity_text).resolve_scale()
+        return alt.vconcat(matrix).resolve_scale()
 
     def _create_roc_curve(self, y_true: np.ndarray, y_pred: np.ndarray) -> alt.Chart:
         """Generate ROC curve visualization"""
@@ -458,16 +571,16 @@ class ModelPerformance:
         return chart
 
     def _create_channel_efficiency_vs_pt(self, 
-                                        X: np.ndarray, 
-                                        y: np.ndarray, 
-                                        channels: np.ndarray,
-                                        y_pred: np.ndarray = None,
-                                        pt_values: np.ndarray = None, 
-                                        pt_index: int = None) -> alt.Chart:
+                                    X: np.ndarray, 
+                                    y: np.ndarray, 
+                                    channels: np.ndarray,
+                                    y_pred: np.ndarray = None,
+                                    pt_values: np.ndarray = None, 
+                                    pt_index: int = None) -> alt.Chart:
         """
         Create efficiency histograms in TwoBody_PT for specific signal channels.
         
-        Shows efficiency at different cut values (0.75, 0.9, 0.95, 0.99) with binomial errors.
+        Shows efficiency at different cut values with uncertainty bands.
         Also displays minbias rejection rate for each cut value.
         
         Args:
@@ -477,11 +590,7 @@ class ModelPerformance:
             y_pred: Predicted probabilities (if None, will be computed)
             pt_values: PT values extracted from X (if None, will be extracted using pt_index)
             pt_index: Index of PT feature in X (if None, will be determined from feature_names)
-        """
-        # Print diagnostic info
-        print(f"Creating channel efficiency chart with {len(channels)} channel entries")
-        print(f"Unique channels: {np.unique(channels)}")
-        
+        """        
         # Check if channels array is provided and has correct shape
         if channels is None or len(channels) != len(X):
             # Return informative chart if channels data is incompatible
@@ -508,7 +617,7 @@ class ModelPerformance:
             pt_values = X[:, pt_index]
         
         # Define cut values
-        cut_values = [0.75, 0.9, 0.95, 0.99]
+        cut_values = [0.75, 0.95, 0.99, 0.995]
         
         # Selected signal channels to analyze
         selected_channels = ['Bs_phiphi', 'Bp_KpJpsi', 'B0_Kpi', 'B0_D0pipi']
@@ -520,7 +629,6 @@ class ModelPerformance:
         # Ensure all arrays have compatible shapes
         minbias_mask = (channels == 'minbias')
         minbias_total = np.sum(minbias_mask)
-        print(f"Found {minbias_total} minbias events")
         
         minbias_rejection = {}
         
@@ -538,7 +646,6 @@ class ModelPerformance:
             minbias_rejected = np.sum(minbias_mask & (flattened_preds < cut))
             rejection_rate = minbias_rejected / minbias_total if minbias_total > 0 else 0
             minbias_rejection[cut] = rejection_rate
-            print(f"Cut {cut}: Rejected {minbias_rejected}/{minbias_total} minbias events ({rejection_rate:.4f})")
         
         # Data structure to store efficiency results
         efficiency_data = []
@@ -547,7 +654,6 @@ class ModelPerformance:
         for channel in selected_channels:
             channel_mask = (channels == channel)
             channel_total = np.sum(channel_mask)
-            print(f"Found {channel_total} events for channel {channel}")
             
             # Skip if no events in this channel
             if channel_total == 0:
@@ -587,6 +693,8 @@ class ModelPerformance:
                         'PT_Max': pt_max,
                         'Efficiency': efficiency,
                         'Error': error,
+                        'Efficiency_lower': max(0, efficiency - error),
+                        'Efficiency_upper': min(1, efficiency + error),
                         'TotalEvents': total_events,
                         'PassingEvents': passing_cut,
                         'MinbiasRejection': minbias_rejection[cut]
@@ -611,26 +719,28 @@ class ModelPerformance:
             if len(cut_df) == 0:
                 continue
                 
-            # Create base chart encoding
-            base = alt.Chart(cut_df).encode(
+            # Create uncertainty band first (so it's drawn behind the points)
+            band = alt.Chart(cut_df).mark_area(opacity=0.3).encode(
+                x=alt.X('PT_Bin:Q'),
+                y=alt.Y('Efficiency_lower:Q'),
+                y2=alt.Y2('Efficiency_upper:Q'),
+                color=alt.Color('Channel:N')
+            )
+            
+            # Create data points (filled dots instead of rings)
+            points = alt.Chart(cut_df).mark_circle(size=50, filled=True).encode(
                 x=alt.X('PT_Bin:Q', title='TwoBody_PT [GeV]', scale=alt.Scale(domain=[0, 20])),
+                y=alt.Y('Efficiency:Q', title='Efficiency', scale=alt.Scale(domain=[0, 1])),
                 color=alt.Color('Channel:N', scale=alt.Scale(scheme='category10')),
                 tooltip=['Channel:N', 'PT_Bin:Q', 'Efficiency:Q', 'Error:Q', 
                         'TotalEvents:Q', 'PassingEvents:Q']
             )
             
-            # Line chart for efficiency
-            line = base.mark_line().encode(
-                y=alt.Y('Efficiency:Q', title='Efficiency', scale=alt.Scale(domain=[0, 1])),
-            )
-            
-            # Add error bars
-            error_bars = base.mark_errorbar().encode(
-                y=alt.Y('Efficiency_lower:Q', title=''),
-                y2=alt.Y2('Efficiency_upper:Q')
-            ).transform_calculate(
-                Efficiency_lower="max(0, datum.Efficiency - datum.Error)",
-                Efficiency_upper="min(1, datum.Efficiency + datum.Error)"
+            # Create connecting lines
+            lines = alt.Chart(cut_df).mark_line().encode(
+                x=alt.X('PT_Bin:Q'),
+                y=alt.Y('Efficiency:Q'),
+                color=alt.Color('Channel:N')
             )
             
             # Add minbias rejection text
@@ -644,8 +754,8 @@ class ModelPerformance:
                 text='text:N'
             )
             
-            # Combine line chart with error bars and text
-            chart = (line + error_bars + rejection_text).properties(
+            # Combine all elements
+            chart = (band + lines + points + rejection_text).properties(
                 width=400,
                 height=250,
                 title=f'Channel Efficiency vs PT (Cut = {cut})'
@@ -661,7 +771,7 @@ class ModelPerformance:
                 alt.hconcat(cut_charts[2], cut_charts[3]).resolve_scale(color='shared')
                 if len(cut_charts) > 3 else (cut_charts[2] if len(cut_charts) > 2 else alt.Chart()),
             ).resolve_scale(color='shared').properties(
-                title='Signal Channel Efficiency vs PT with Binomial Errors'
+                title='Signal Channel Efficiency vs PT with Uncertainty Bands'
             )
         else:
             return alt.Chart(pd.DataFrame({'message': ['No efficiency data available']})).mark_text().encode(
@@ -687,3 +797,101 @@ class ModelPerformance:
             
         except Exception as e:
             print(f"Failed to log dashboard: {str(e)}")
+
+    def _create_feature_correlation_matrices(self, X: np.ndarray, y: np.ndarray) -> alt.Chart:
+        """
+        Create feature correlation heatmaps separately for signal and background samples.
+        
+        Args:
+            X: Feature matrix
+            y: Target labels (binary)
+        
+        Returns:
+            alt.Chart: Altair chart with two correlation matrices
+        """
+        # Separate signal and background samples
+        X_signal = X[y.ravel() == 1]
+        X_background = X[y.ravel() == 0]
+        
+        # Check if we have enough samples in each class
+        if len(X_signal) < 2 or len(X_background) < 2:
+            # Return an error message if not enough samples
+            message = f"Not enough samples to compute correlations. Signal: {len(X_signal)}, Background: {len(X_background)}"
+            return alt.Chart(pd.DataFrame({'message': [message]})).mark_text().encode(
+                text='message'
+            ).properties(width=800, height=400)
+        
+        # Compute correlation matrices
+        signal_corr = np.corrcoef(X_signal, rowvar=False)
+        background_corr = np.corrcoef(X_background, rowvar=False)
+        
+        # Create DataFrames with feature names
+        signal_corr_df = pd.DataFrame(signal_corr, 
+                                    columns=self.feature_names, 
+                                    index=self.feature_names)
+        background_corr_df = pd.DataFrame(background_corr, 
+                                        columns=self.feature_names, 
+                                        index=self.feature_names)
+        
+        # Reshape for visualization (long format)
+        signal_corr_long = signal_corr_df.reset_index().melt(
+            id_vars='index', 
+            value_name='correlation', 
+            var_name='feature'
+        )
+        signal_corr_long['type'] = 'Signal'
+        
+        background_corr_long = background_corr_df.reset_index().melt(
+            id_vars='index', 
+            value_name='correlation', 
+            var_name='feature'
+        )
+        background_corr_long['type'] = 'Background'
+        
+        # Combine data
+        combined_corr = pd.concat([signal_corr_long, background_corr_long])
+        
+        # Define color scheme with diverging colors
+        # Blue-White-Red palette
+        color_scheme = alt.Scale(
+            domain=[-1, 0, 1],
+            range=['#1f77b4', '#ffffff', '#d62728']  # Blue, White, Red
+        )
+        
+        # Create base heatmap
+        base = alt.Chart(combined_corr).encode(
+            x=alt.X('feature:N', title=None),
+            y=alt.Y('index:N', title=None),
+            tooltip=['index:N', 'feature:N', 'correlation:Q', 'type:N']
+        )
+        
+        # Create heatmap with colored cells
+        heatmap = base.mark_rect().encode(
+            color=alt.Color('correlation:Q', 
+                            scale=color_scheme,
+                            legend=alt.Legend(title='Correlation'))
+        )
+        
+        # Add correlation values as text
+        text = base.mark_text(baseline='middle').encode(
+            text=alt.Text('correlation:Q', format='.2f'),
+            color=alt.condition(
+                abs(alt.datum.correlation) > 0.7,
+                alt.value('white'),
+                alt.value('black')
+            )
+        )
+        
+        # Combine heatmap and text
+        matrix = (heatmap + text).properties(
+            width=400,
+            height=400
+        )
+        
+        # Create faceted view for signal and background without config methods
+        faceted_matrix = matrix.facet(
+            column=alt.Column('type:N', title=None),
+            title='Feature Correlation Matrices'
+        )
+        
+        return faceted_matrix

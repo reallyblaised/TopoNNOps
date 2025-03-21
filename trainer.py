@@ -258,7 +258,6 @@ class Trainer:
             # Get channels if available
             channels = self.data_module.test_channels if hasattr(self.data_module, 'test_channels') else None
             
-            print(f"Creating visualization dashboard with {len(X_viz)} samples")
             self.performance.create_performance_dashboard(
                 X_viz.cpu().numpy(), y_viz.numpy(), 
                 history, epoch,

@@ -14,7 +14,7 @@ mlflow:
 # - "lipschitz": Lipschitz-constrained neural network
 # - "lipschitz_monotonic": Lipschitz-constrained neural network with monotonicity constraints
 defaults:
-  - model: lipschitz
+  - model: unconstrained
   - optimizer: adam 
   - _self_
 
@@ -35,10 +35,10 @@ metrics:
 # Training parameters
 training:
   training_data_scale_factor: 0.05
-  sb_ratio: 5.0
-  num_epochs: 50
+  sb_ratio: 1.0
+  num_epochs: 25
   batch_size: 128
-  loss_fn: "weighted_bce" # Options: bce_with_logits, focal, combined_focal_wbce, weighted_bce
+  loss_fn: "bce_with_logits" # Options: bce_with_logits, focal, combined_focal_wbce, weighted_bce
 
 # Data paths
 paths:
