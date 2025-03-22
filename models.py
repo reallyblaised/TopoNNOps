@@ -5,6 +5,7 @@ import numpy as np
 import yaml
 from pathlib import Path
 import sys
+import monotonicnetworks as lmn
 
 class UnconstrainedNet(nn.Module):
     """
@@ -132,28 +133,33 @@ class UnconstrainedNet(nn.Module):
                 if module.bias is not None:
                     nn.init.zeros_(module.bias)
 
-# Import from monotonenorm if available, otherwise create placeholder imports
+# Import from monotonicnetworks if available, otherwise create placeholder imports
 try:
-    from monotonenorm import SigmaNet, GroupSort, direct_norm
+    import monotonicnetworks as lmn
 except ImportError:
-    print("WARNING: monotonenorm not found, creating placeholder classes")
+    print("WARNING: monotonicnetworks not found, creating placeholder classes")
     # Create placeholder classes/functions for documentation
-    class SigmaNet(nn.Module):
-        def __init__(self, model, sigma, monotone_constraints):
+    class LipschitzLinear(nn.Module):
+        def __init__(self, in_features, out_features, kind="one"):
             super().__init__()
-            self.model = model
-            self.sigma = sigma
-            self.monotone_constraints = monotone_constraints
-            raise ImportError("monotonenorm library is required for SigmaNet")
+            self.in_features = in_features
+            self.out_features = out_features
+            self.kind = kind
+            raise ImportError("monotonicnetworks library is required for LipschitzLinear")
     
     class GroupSort(nn.Module):
         def __init__(self, num_units):
             super().__init__()
             self.num_units = num_units
-            raise ImportError("monotonenorm library is required for GroupSort")
+            raise ImportError("monotonicnetworks library is required for GroupSort")
     
-    def direct_norm(module, always_norm=False, kind="one", max_norm=1.0):
-        raise ImportError("monotonenorm library is required for direct_norm")
+    class MonotonicWrapper(nn.Module):
+        def __init__(self, lipschitz_module, lipschitz_const=1.0, monotonic_constraints=None):
+            super().__init__()
+            self.nn = lipschitz_module
+            self.lipschitz_const = lipschitz_const
+            self.monotonic_constraints = monotonic_constraints
+            raise ImportError("monotonicnetworks library is required for MonotonicWrapper")
 
 
 class LipschitzNet(nn.Module):
@@ -176,7 +182,8 @@ class LipschitzNet(nn.Module):
         activation_fn: str = "groupsort",
         dropout_rate: float = 0.0,
         batch_norm: bool = False,
-        l1_factor: float = 0.0
+        l1_factor: float = 0.0,
+        lip_kind: str = "one"  # Add a new parameter for Lipschitz constraint type
     ):
         """
         Initialize a Lipschitz-constrained neural network.
@@ -193,6 +200,12 @@ class LipschitzNet(nn.Module):
             dropout_rate: Dropout rate
             batch_norm: Whether to use batch normalization
             l1_factor: L1 regularization factor
+            lip_kind: Type of Lipschitz constraint to use:
+                      - "one": Use kind="one" for all layers (default)
+                      - "inf": Use kind="inf" for all layers
+                      - "one-inf": Use kind="one-inf" for first layer, kind="inf" for all following layers
+                      - "nominal": Use kind="one-inf" for first layer, kind="inf" for middle layers, and kind="one" for output layer
+                      - "default": Same as "one-inf"
         """
         super().__init__()
         self.input_dim = input_dim
@@ -206,6 +219,8 @@ class LipschitzNet(nn.Module):
         self.dropout_rate = dropout_rate
         self.batch_norm = batch_norm
         self.l1_factor = l1_factor
+        
+        self.lip_kind = lip_kind
         
         # Build the model
         self.model = self._build_model()
@@ -243,65 +258,69 @@ class LipschitzNet(nn.Module):
             # Return a list of zeros (no monotonicity constraints)
             return [0] * self.input_dim
     
-    def _lipschitz_norm(self, module, is_norm=False, kind="one"):
-        """Apply Lipschitz normalization to a module."""
-        n_layers = len(self.layer_dims) + 1  # +1 for output layer
-        
-        # Calculate max norm for each layer to ensure overall constraint of lip_const
-        max_norm = self.lip_const ** (1 / n_layers)
-        
-        return direct_norm(
-            module,
-            always_norm=is_norm,
-            kind=kind,
-            max_norm=max_norm
-        )
-    
     def _build_model(self):
-        """Build the Lipschitz-constrained model."""
-        model_layers = []
+        """Build the Lipschitz-constrained model using monotonicnetworks."""
+        # Check for unsupported options with Lipschitz constraints
+        if self.batch_norm or self.dropout_rate > 0:
+            raise ValueError("Batch normalization and dropout are not supported with Lipschitz constraints.")
+        
+        # Check activation function
+        if self.activation_fn.lower() != 'groupsort':
+            raise ValueError(f"Unsupported activation function: {self.activation_fn}. Only 'groupsort' is supported.")
+        
+        # Determine layer kinds based on lip_kind parameter
+        if self.lip_kind == "one-inf":
+            # First layer uses "one-inf", all others use "inf"
+            layer_kinds = ["one-inf"] + ["inf"] * len(self.layer_dims)
+        elif self.lip_kind in ["one", "inf"]:
+            # All layers use the same kind
+            layer_kinds = [self.lip_kind] * (len(self.layer_dims) + 1)
+        elif self.lip_kind == "nominal":
+            # First layer uses "one-inf", middle layers use "inf", output layer uses "one"
+            layer_kinds = ["one-inf"] + ["inf"] * (len(self.layer_dims) - 1) + ["one"]
+        elif self.lip_kind == "default":
+            # First layer uses "one-inf", all others use "inf"
+            layer_kinds = ["one-inf"] + ["inf"] * len(self.layer_dims)
+        else:
+            raise ValueError(f"Unsupported lip_kind: {self.lip_kind}")
+        
+        # Build the sequential model
+        layers = []
         in_features = self.input_dim
         
         # Add hidden layers
-        for dim in self.layer_dims:
-            # Linear layer with Lipschitz constraint
-            model_layers.append(self._lipschitz_norm(nn.Linear(in_features, dim)))
+        for idx, dim in enumerate(self.layer_dims):
+            # Add LipschitzLinear layer with appropriate kind
+            layers.append(lmn.LipschitzLinear(in_features, dim, kind=layer_kinds[idx]))
             
-            # Activation function
-            if self.activation_fn.lower() == 'groupsort':
-                model_layers.append(GroupSort(dim // 2))
-            else:
-                raise ValueError(f"Unsupported activation function: {self.activation_fn}")
-            
-            # abort if batch_norm or dropout is used
-            if self.batch_norm or self.dropout_rate > 0:
-                raise ValueError("Batch normalization and dropout are not supported with Lipschitz constraints.")
-            
+            # Add activation function (GroupSort with dim // 2 groups)
+            layers.append(lmn.GroupSort(dim // 2)) # NOTE: mathematically, this buys more expressivity
+
             in_features = dim
         
-        # Output layer (binary classification)
-        model_layers.append(self._lipschitz_norm(nn.Linear(in_features, 1)))
+        # Add output layer
+        layers.append(lmn.LipschitzLinear(in_features, 1, kind=layer_kinds[-1]))
         
         # Create the sequential model
-        model = nn.Sequential(*model_layers)
+        model = nn.Sequential(*layers)
         
-        # If monotonicity is enabled, wrap with SigmaNet
+        # If monotonicity is enabled, wrap with MonotonicWrapper
         if self.monotonic:
             # Load monotonicity constraints from config
-            monotone_constraints = self._load_monotone_constrs(
+            monotonic_constraints = self._load_monotone_constrs(
                 self.features_config_path, self.nbody
             )
 
             # Ensure we have the right number of constraints
-            assert len(monotone_constraints) == self.input_dim, \
-                f"Number of monotonicity constraints ({len(monotone_constraints)}) " \
+            assert len(monotonic_constraints) == self.input_dim, \
+                f"Number of monotonicity constraints ({len(monotonic_constraints)}) " \
                 f"does not match input dimension ({self.input_dim})"
             
-            # Wrap the model with SigmaNet
-            model = SigmaNet(
+            # Wrap the model with MonotonicWrapper
+            model = lmn.MonotonicWrapper(
                 model, 
-                sigma=self.lip_const, 
-                monotone_constraints=monotone_constraints
+                lipschitz_const=self.lip_const, 
+                monotonic_constraints=monotonic_constraints
             )
             
         return model
@@ -317,3 +336,81 @@ class LipschitzNet(nn.Module):
             for param in self.parameters():
                 l1_loss += torch.abs(param).sum()
         return self.l1_factor * l1_loss
+
+    def print_architecture_details(self):
+        """
+        Print detailed information about the Lipschitz network architecture.
+        Includes Lipschitz constants, GroupSort arguments, and Lipschitz kind.
+        """
+        print("\n===== LipschitzNet Architecture Details =====")
+        print(f"Input dimension: {self.input_dim}")
+        print(f"Layer dimensions: {self.layer_dims}")
+        print(f"Lipschitz constant: {self.lip_const}")
+        print(f"Lipschitz constraint type: {self.lip_kind}")
+        print(f"Monotonicity enabled: {self.monotonic}")
+        print(f"Activation function: {self.activation_fn}")
+        print(f"NBodies setting: {self.nbody}")
+        
+        # Always print monotonicity constraints, even if monotonicity is disabled
+        # This helps verify what constraints would be applied if monotonicity was enabled
+        monotonic_constraints = self._load_monotone_constrs(
+            self.features_config_path, self.nbody
+        )
+        print(f"Monotonicity constraints array: {monotonic_constraints}")
+        
+        if self.feature_names:
+            print("\nFeature-by-feature monotonicity settings:")
+            for i, feature in enumerate(self.feature_names):
+                constraint_value = monotonic_constraints[i] if i < len(monotonic_constraints) else 0
+                constraint_desc = "increasing" if constraint_value == 1 else \
+                            "decreasing" if constraint_value == -1 else "none"
+                status = "ACTIVE" if self.monotonic and constraint_value != 0 else "inactive"
+                print(f"  - {feature}: {constraint_desc} ({constraint_value}) - {status}")
+        
+        print("\nLayer-by-layer details:")
+        
+        # Determine layer kinds based on lip_kind parameter
+        if self.lip_kind == "one-inf":
+            # First layer uses "one-inf", all others use "inf"
+            layer_kinds = ["one-inf"] + ["inf"] * len(self.layer_dims)
+        elif self.lip_kind in ["one", "inf"]:
+            # All layers use the same kind
+            layer_kinds = [self.lip_kind] * (len(self.layer_dims) + 1)
+        elif self.lip_kind == "nominal":
+            # First layer uses "one-inf", middle layers use "inf", output layer uses "one"
+            layer_kinds = ["one-inf"] + ["inf"] * (len(self.layer_dims) - 1) + ["one"]
+        elif self.lip_kind == "default":
+            # First layer uses "one-inf", all others use "inf"
+            layer_kinds = ["one-inf"] + ["inf"] * len(self.layer_dims)
+        else:
+            layer_kinds = ["unknown"] * (len(self.layer_dims) + 1)
+        
+        # Print details for each layer
+        in_features = self.input_dim
+        for idx, dim in enumerate(self.layer_dims):
+            print(f"Layer {idx+1}:")
+            print(f"  - LipschitzLinear: in={in_features}, out={dim}, kind={layer_kinds[idx]}")
+            print(f"  - GroupSort: num_groups={dim // 2}")
+            in_features = dim
+        
+        # Output layer
+        print(f"Output Layer:")
+        print(f"  - LipschitzLinear: in={in_features}, out=1, kind={layer_kinds[-1]}")
+        
+        # Print wrapper information if monotonicity is enabled
+        if self.monotonic:
+            print("\nMonotonicity Implementation:")
+            print(f"  - Using MonotonicWrapper with lipschitz_const={self.lip_const}")
+            
+            # Create a more readable representation of monotonic constraints
+            if self.feature_names:
+                monotonic_repr = "["
+                for i, feature in enumerate(self.feature_names):
+                    constraint_value = monotonic_constraints[i] if i < len(monotonic_constraints) else 0
+                    monotonic_repr += f"{constraint_value},"
+                monotonic_repr = monotonic_repr.rstrip(",") + "]"
+                print(f"  - monotonic_constraints={monotonic_repr}")
+            else:
+                print(f"  - monotonic_constraints={monotonic_constraints}")
+        
+        print("=============================================\n")

@@ -46,7 +46,6 @@ class ModelPerformance:
             if len(channels) != len(X_test):
                 print(f"WARNING: Channel length mismatch. Channels: {len(channels)}, X: {len(X_test)}")
                 # Take the smaller length to avoid index errors
-                breakpoint()
                 min_len = min(len(channels), len(X_test))
                 channels = channels[:min_len]
                 X_test = X_test[:min_len]
@@ -80,10 +79,18 @@ class ModelPerformance:
                 if 'TwoBody_PT' in self.feature_names:
                     pt_index = self.feature_names.index('TwoBody_PT')
                     pt_values = X_test[:, pt_index]
+                    
+                    # Add standard fixed-threshold efficiency charts
                     efficiency_chart = self._create_channel_efficiency_vs_pt(
                         X_test, y_test, channels, y_test_pred, pt_values, pt_index
                     )
                     dashboard_components.append(efficiency_chart)
+                    
+                    # Add dynamic threshold efficiency charts for specific minbias rejection rates
+                    dynamic_efficiency_chart = self._create_dynamic_threshold_efficiency_vs_pt(
+                        X_test, y_test, channels, y_test_pred, pt_values, pt_index
+                    )
+                    dashboard_components.append(dynamic_efficiency_chart)
                 else:
                     print("TwoBody_PT not found in features, skipping efficiency chart")
             except Exception as e:
@@ -99,7 +106,7 @@ class ModelPerformance:
         )
         
         # Log to MLflow
-        self._log_dashboard(dashboard, epoch)
+        self._log_dashboard(dashboard, epoch) 
 
     def _get_predictions(self, X: np.ndarray) -> np.ndarray:
         """Get model predictions"""
@@ -621,7 +628,7 @@ class ModelPerformance:
         cut_values = [0.75, 0.95, 0.99, 0.995]
         
         # Selected signal channels to analyze
-        selected_channels = ['Bs_phiphi', 'Bp_KpJpsi', 'B0_Kpi', 'B0_D0pipi', 'Bp_D0taunu', 'Bs_Kmunu', 'Bs_Dstaunu', 'B0_DpDm']
+        selected_channels = ['Bs_JpsiPhi', 'Bp_KpJpsi', 'B0_D0pipi', 'Bs_Dstaunu']
         
         # Define PT bins from 0 to 20 GeV in 1 GeV increments
         pt_bins = np.linspace(0, 20, 21)  # 21 points to get 20 bins of 1.0 GeV each
@@ -1018,3 +1025,337 @@ class ModelPerformance:
         )
         
         return faceted_matrix
+
+    def _find_threshold_for_rejection_rate(
+        self, 
+        y_pred: np.ndarray, 
+        channels: np.ndarray, 
+        target_rejection_rate: float
+    ) -> float:
+        """
+        Find the exact threshold value that achieves a specified minbias rejection rate.
+        
+        Args:
+            y_pred: Model predictions
+            channels: Array of channel labels
+            target_rejection_rate: Target minbias rejection rate (e.g., 0.995)
+            
+        Returns:
+            float: Threshold value that achieves the target rejection rate
+        """
+        # Get minbias samples
+        minbias_mask = (channels == 'minbias')
+        minbias_preds = y_pred.ravel()[minbias_mask]
+        
+        if len(minbias_preds) == 0:
+            print("Warning: No minbias samples found")
+            return 0.5  # Default threshold
+        
+        # Sort predictions in ascending order
+        sorted_preds = np.sort(minbias_preds)
+        
+        # Find the exact threshold that gives the target rejection rate
+        # For 0.995 rejection, we want the value where 99.5% of minbias predictions are below it
+        index = int(len(sorted_preds) * target_rejection_rate)
+        if index >= len(sorted_preds):
+            index = len(sorted_preds) - 1  # Avoid out of bounds
+            
+        threshold = sorted_preds[index]
+        
+        # Verify actual rejection rate at this threshold
+        actual_rejection = np.mean(minbias_preds <= threshold)
+        
+        return threshold
+
+    def _create_dynamic_threshold_efficiency_vs_pt(
+        self, 
+        X: np.ndarray, 
+        y: np.ndarray, 
+        channels: np.ndarray, 
+        y_pred: np.ndarray,
+        pt_values: np.ndarray, 
+        pt_index: int
+    ) -> alt.Chart:
+        """
+        Create efficiency histograms in TwoBody_PT for specific signal channels using dynamic thresholds
+        that achieve specific minbias rejection rates.
+        
+        Args:
+            X: Feature matrix
+            y: Target labels
+            channels: Array of channel names for each sample
+            y_pred: Predicted probabilities
+            pt_values: PT values extracted from X
+            pt_index: Index of PT feature in X
+        """
+        # Check if channels array is provided and has correct shape
+        if channels is None or len(channels) != len(X):
+            # Return informative chart if channels data is incompatible
+            return alt.Chart(pd.DataFrame({'message': [f'Channel data shape mismatch for dynamic thresholds']})).mark_text().encode(
+                text='message:N'
+            ).properties(width=800, height=200)
+        
+        # Define target rejection rates
+        target_rejection_rates = [0.995, 0.999]
+        
+        # Find thresholds for each target rejection rate
+        dynamic_thresholds = {}
+        for rate in target_rejection_rates:
+            threshold = self._find_threshold_for_rejection_rate(y_pred, channels, rate)
+            dynamic_thresholds[rate] = threshold
+        
+        # Selected signal channels to analyze
+        selected_channels = ['Bs_JpsiPhi', 'Bp_KpJpsi', 'B0_D0pipi', 'Bs_Dstaunu'] 
+        
+        # Define PT bins from 0 to 20 GeV in 1 GeV increments
+        pt_bins = np.linspace(0, 20, 21)  # 21 points to get 20 bins of 1.0 GeV each
+        
+        # Data structure to store efficiency results
+        efficiency_data = []
+        
+        # Dictionary to store overall efficiency per channel per threshold
+        overall_efficiencies = {}
+        
+        # Calculate overall efficiencies for each channel and dynamic threshold
+        for channel in selected_channels:
+            channel_mask = (channels == channel)
+            channel_total = np.sum(channel_mask)
+            
+            # Skip if no events in this channel
+            if channel_total == 0:
+                continue
+                
+            # Calculate overall efficiency for each threshold
+            for rate, threshold in dynamic_thresholds.items():
+                rate_key = f"{rate:.3f}"
+                if channel not in overall_efficiencies:
+                    overall_efficiencies[channel] = {}
+                    
+                # Count signal events passing the threshold
+                passing = np.sum(channel_mask & (y_pred.ravel() >= threshold))
+                
+                # Calculate overall efficiency
+                if channel_total > 0:
+                    overall_eff = passing / channel_total
+                    overall_efficiencies[channel][rate_key] = {
+                        'efficiency': overall_eff,
+                        'passing': int(passing),
+                        'total': int(channel_total),
+                        'threshold': threshold
+                    }
+        
+        # Calculate efficiency for each channel, threshold, and PT bin
+        for channel in selected_channels:
+            channel_mask = (channels == channel)
+            channel_total = np.sum(channel_mask)
+            
+            # Skip if no events in this channel
+            if channel_total == 0:
+                continue
+                
+            # Process each threshold
+            for rate, threshold in dynamic_thresholds.items():
+                rate_key = f"{rate:.3f}"
+                
+                # Calculate efficiency in each PT bin
+                for i in range(len(pt_bins) - 1):
+                    pt_min, pt_max = pt_bins[i], pt_bins[i+1]
+                    
+                    # Select events in this channel and PT bin
+                    pt_mask = (pt_values >= pt_min) & (pt_values < pt_max)
+                    combined_mask = channel_mask & pt_mask
+                    
+                    # Skip bins with no events
+                    total_events = np.sum(combined_mask)
+                    if total_events == 0:
+                        continue
+                    
+                    # Count events passing the threshold
+                    passing = np.sum(combined_mask & (y_pred.ravel() >= threshold))
+                    
+                    # Calculate efficiency
+                    efficiency = passing / total_events
+                    
+                    # Calculate binomial error
+                    error = np.sqrt((efficiency * (1 - efficiency)) / total_events) if total_events > 0 else 0
+                    
+                    # Store results
+                    efficiency_data.append({
+                        'Channel': channel,
+                        'RejectionRate': rate_key,
+                        'Threshold': threshold,
+                        'PT_Bin': (pt_min + pt_max) / 2,  # Bin center for plotting
+                        'PT_Min': pt_min,
+                        'PT_Max': pt_max,
+                        'Efficiency': efficiency,
+                        'Error': error,
+                        'Efficiency_lower': max(0, efficiency - error),
+                        'Efficiency_upper': min(1, efficiency + error),
+                        'TotalEvents': total_events,
+                        'PassingEvents': passing
+                    })
+        
+        # Create DataFrame for visualization
+        df = pd.DataFrame(efficiency_data)
+        
+        # Return early if no data is available
+        if len(df) == 0:
+            return alt.Chart(pd.DataFrame({'message': ['No dynamic threshold efficiency data available']})).mark_text().encode(
+                text='message:N'
+            ).properties(width=800, height=200)
+        
+        # Create PT distribution data for all beauty channels combined
+        beauty_channels_mask = np.zeros_like(channels, dtype=bool)
+        for channel in selected_channels:
+            beauty_channels_mask |= (channels == channel)
+        
+        beauty_pt_values = pt_values[beauty_channels_mask]
+        
+        # Create histogram data
+        hist, bin_edges = np.histogram(beauty_pt_values, bins=pt_bins)
+        
+        # Normalize the histogram
+        max_bin_height = np.max(hist)
+        if max_bin_height > 0:
+            hist = hist / max_bin_height
+        
+        # Create DataFrame for PT distribution
+        pt_dist_data = []
+        for i in range(len(hist)):
+            bin_center = (bin_edges[i] + bin_edges[i+1]) / 2
+            pt_dist_data.append({
+                'PT_Bin': bin_center,
+                'Normalized_Height': hist[i]
+            })
+        
+        pt_dist_df = pd.DataFrame(pt_dist_data)
+        
+        # Create separate charts for each rejection rate
+        rate_charts = []
+        
+        for rate in target_rejection_rates:
+            rate_key = f"{rate:.3f}"
+            threshold = dynamic_thresholds[rate]
+            
+            # Filter data for this rejection rate
+            rate_df = df[df['RejectionRate'] == rate_key]
+            
+            if len(rate_df) == 0:
+                continue
+            
+            # Create base chart for the PT bins
+            base = alt.Chart(pt_dist_df).encode(
+                x=alt.X('PT_Bin:Q', scale=alt.Scale(domain=[0, 20]), title='TwoBody_PT [GeV]')
+            )
+            
+            # Add the PT distribution as a gray shaded area
+            pt_area = base.mark_area(opacity=0.3, color='gray').encode(
+                y='Normalized_Height:Q'
+            )
+            
+            # Create base for efficiency plots
+            eff_base = alt.Chart(rate_df).encode(
+                x=alt.X('PT_Bin:Q')
+            )
+            
+            # Create uncertainty bands
+            bands = eff_base.mark_area(opacity=0.3).encode(
+                y=alt.Y('Efficiency_lower:Q'),
+                y2=alt.Y2('Efficiency_upper:Q'),
+                color=alt.Color('Channel:N', scale=alt.Scale(scheme='category10'))
+            )
+            
+            # Create lines connecting the points
+            lines = eff_base.mark_line().encode(
+                y=alt.Y('Efficiency:Q', title='Efficiency', scale=alt.Scale(domain=[0, 1])),
+                color=alt.Color('Channel:N')
+            )
+            
+            # Create points
+            points = eff_base.mark_circle(size=50).encode(
+                y=alt.Y('Efficiency:Q'),
+                color=alt.Color('Channel:N'),
+                tooltip=['Channel:N', 'PT_Bin:Q', 'Efficiency:Q', 'Error:Q', 
+                        'TotalEvents:Q', 'PassingEvents:Q', 'Threshold:Q']
+            )
+            
+            # Add channel efficiency text and threshold value
+            text_data = []
+            
+            # First, add threshold information
+            text_data.append({
+                'x': 10,
+                'y': 0.08,
+                'text': f"Minbias rejection: {rate:.4f} (threshold = {threshold:.6f})",
+                'channel': 'Minbias'
+            })
+            
+            # Then add efficiency for each channel
+            y_position = 0.15
+            for channel in selected_channels:
+                if channel in overall_efficiencies and rate_key in overall_efficiencies[channel]:
+                    eff_info = overall_efficiencies[channel][rate_key]
+                    text_data.append({
+                        'x': 10,
+                        'y': y_position,
+                        'text': f"{channel}: {eff_info['efficiency']:.4f} ({eff_info['passing']}/{eff_info['total']})",
+                        'channel': channel
+                    })
+                    y_position += 0.05
+            
+            # Create text marks
+            text_marks = alt.Chart(pd.DataFrame(text_data)).mark_text(
+                align='center',
+                baseline='middle',
+                fontSize=8
+            ).encode(
+                x='x:Q',
+                y='y:Q',
+                text='text:N',
+                color=alt.condition(
+                    alt.datum.channel == 'Minbias',
+                    alt.value('black'),
+                    alt.Color('channel:N', scale=alt.Scale(scheme='category10'))
+                )
+            )
+            
+            # Combine all elements
+            combined_chart = alt.layer(
+                pt_area,
+                bands,
+                lines,
+                points,
+                text_marks
+            ).properties(
+                width=400,
+                height=300,
+                title=f'Channel Efficiency vs PT (Minbias Rejection = {rate:.3f}, Cut = {threshold:.6f})'
+            )
+            
+            rate_charts.append(combined_chart)
+        
+        # Combine all rejection rate charts into a single view
+        if rate_charts:
+            # Create title for overall chart
+            title_chart = alt.Chart(pd.DataFrame([{'text': 'Signal Channel Efficiency vs PT at Fixed Minbias Rejection Rates'}])).mark_text(
+                fontSize=16,
+                font='Arial',
+                fontWeight='bold'
+            ).encode(
+                text='text:N'
+            )
+            
+            # Arrange charts horizontally or in a grid
+            if len(rate_charts) == 2:
+                final_chart = alt.hconcat(
+                    rate_charts[0], rate_charts[1]
+                ).resolve_scale(color='shared')
+            else:
+                # Just use whatever charts we have
+                final_chart = alt.hconcat(*rate_charts).resolve_scale(color='shared')
+            
+            return alt.vconcat(title_chart, final_chart).resolve_scale(color='shared')
+        else:
+            return alt.Chart(pd.DataFrame({'message': ['No dynamic threshold efficiency data available']})).mark_text().encode(
+                text='message:N'
+            ).properties(width=800, height=200)

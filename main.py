@@ -37,6 +37,9 @@ def get_model(cfg: DictConfig, input_dim: int, feature_names: List[str]) -> nn.M
         monotonic = (architecture == "lipschitz_monotonic" or 
                      cfg.model.get("monotonic", False))
         
+        # Handle Lipschitz constraint type
+        lip_kind = cfg.model.get("lip_kind", "default")
+        
         return LipschitzNet(
             input_dim=input_dim,
             layer_dims=cfg.model.layer_dims,
@@ -48,7 +51,8 @@ def get_model(cfg: DictConfig, input_dim: int, feature_names: List[str]) -> nn.M
             activation_fn=cfg.model.get("activation_fn", "groupsort"),
             dropout_rate=cfg.model.get("dropout_rate", 0.0),
             batch_norm=cfg.model.get("batch_norm", False),
-            l1_factor=cfg.model.get("l1_factor", 0.0)
+            l1_factor=cfg.model.get("l1_factor", 0.0),
+            lip_kind=lip_kind
         )
     
     # Unknown architecture
@@ -151,7 +155,10 @@ def log_model_with_metadata(model, data_module, cfg):
             "architecture": cfg.model.identifier,
             "layer_dimensions": cfg.model.layer_dims,
             "activation_function": cfg.model.get("activation_fn", "relu"),
-            
+
+            # Lipschitz constraint (if available)
+            "lip_const": cfg.model.get("lip_const", None),
+
             # Training information
             "training_scale_factor": cfg.training.get("training_data_scale_factor", 1.0),
             "signal_background_ratio": cfg.training.get("sb_ratio", 0.1),
@@ -198,6 +205,10 @@ def main(cfg: DictConfig) -> None:
         # Log model architecture to MLflow for dashboarding
         mlflow.log_param("architecture", cfg.model.identifier)
         
+        # log the lipschitz normalisations scheme 
+        if hasattr(cfg.model, "lip_const"):
+            mlflow.log_param("lip_const", cfg.model.lip_const)
+
         # Log all configurations
         for section in ["model", "optimizer", "training"]:
             if hasattr(cfg, section):
@@ -226,6 +237,10 @@ def main(cfg: DictConfig) -> None:
             model = get_model(cfg, data_module.input_dim, data_module.feature_cols)
             model = model.to(device)
             logger.info(f"Model created: {model}")
+
+            # granular survery of arch in case of LipschitzNet
+            if hasattr(model, 'print_architecture_details'):
+                model.print_architecture_details()  
 
             # Setup training components
             optimizer = get_optimizer(cfg, model)
@@ -265,8 +280,9 @@ def main(cfg: DictConfig) -> None:
             feature_constraints = data_module.feature_config(model=cfg.model.get("nbody", "TwoBody"))
             for feature_name, constraint_value in feature_constraints.items():
                 constraint_type = "monotonic_increasing" if constraint_value == 1 else "no_monotonicity"
-                mlflow.log_param(f"feature.{feature_name}", constraint_type)
-                
+                mlflow.log_param(f"feature.{feature_name}", constraint_type)  
+
+
             # Log class definitions as parameters
             mlflow.log_param("class.0", "Background (minbias)")
             mlflow.log_param("class.1", "Signal (beauty mesons)")
