@@ -333,7 +333,7 @@ class Trainer:
                 # Visualize weights if needed - uncomment this for weight visualizations
                 # self.weight_viz.create_weight_dashboard(X_viz, epoch)
                 
-                print(f"Visualizations for epoch {epoch} created successfully")
+                #print(f"Visualizations for epoch {epoch} created successfully")
             except Exception as e:
                 print(f"Error creating visualizations: {str(e)}")
         else:
