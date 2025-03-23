@@ -14,12 +14,13 @@ mlflow:
 # - "lipschitz": Lipschitz-constrained neural network
 # - "lipschitz_monotonic": Lipschitz-constrained neural network with monotonicity constraints
 defaults:
-  - model: unconstrained
+  - model: lipschitz_monotonic
   - optimizer: adam 
   - _self_
 
 # Path to features configuration file (with monotonicity constraints)
-features_config_path: "config/features.yml"
+trigger: TwoBody
+features_config_path: "config/features_stack.yml"
 
 # Metrics configuration
 metrics:
@@ -34,9 +35,9 @@ metrics:
 
 # Training parameters
 training:
-  training_data_scale_factor: 0.05
-  sb_ratio: 1.0
-  num_epochs: 25
+  training_data_scale_factor: 0.1
+  sb_ratio: 3
+  num_epochs: 30
   batch_size: 128
   loss_fn: "bce_with_logits" # Options: bce_with_logits, focal, combined_focal_wbce, weighted_bce
 

@@ -8,6 +8,7 @@ activation_fn: "groupsort"
 lip_const: 2.0
 nbody: "TwoBody"
 monotonic: true  # Flag to enforce monotonicity constraints
+lip_kind: "nominal"
 
 # Regular parameters
 dropout_rate: 0.0

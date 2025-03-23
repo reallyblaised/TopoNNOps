@@ -20,8 +20,10 @@ class LHCbMCModule:
     def _get_features_config_path(filename: str) -> Path:
         """Find configuration file across possible locations."""
         possible_paths = [
+            Path(f"{filename}"),  # Relative to working directory
             Path(f"config/{filename}"),  # Relative to working directory
             Path(__file__).parent / f"../config/{filename}",  # Relative to this file
+            Path(__file__).parent / f"../{filename}",  # Relative to this file
             Path(f"/work/submit/blaised/TopoNNOps/config/{filename}")  # Original absolute path
         ]
         

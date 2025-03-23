@@ -149,7 +149,10 @@ def log_model_with_metadata(model, data_module, cfg):
             },
             
             # Feature constraints (if available)
-            "feature_constraints": data_module.feature_config(model=cfg.model.get("nbody", "TwoBody")),
+            "feature_constraints": data_module.feature_config(
+                model=cfg.get("trigger", "TwoBody"),
+                feature_config_file=cfg.get("features_config_path", "features.yaml")
+            ),
             
             # Model architecture summary
             "architecture": cfg.model.identifier,
@@ -277,11 +280,13 @@ def main(cfg: DictConfig) -> None:
                 mlflow.log_metric(f"final_{metric_name}", metric_value)
 
             # Log features and their constraints as individual parameters
-            feature_constraints = data_module.feature_config(model=cfg.model.get("nbody", "TwoBody"))
+            feature_constraints = data_module.feature_config(
+                model=cfg.get("trigger", "TwoBody"),
+                feature_config_file=cfg.get("features_config_path", "features.yaml")
+            )
             for feature_name, constraint_value in feature_constraints.items():
                 constraint_type = "monotonic_increasing" if constraint_value == 1 else "no_monotonicity"
                 mlflow.log_param(f"feature.{feature_name}", constraint_type)  
-
 
             # Log class definitions as parameters
             mlflow.log_param("class.0", "Background (minbias)")
