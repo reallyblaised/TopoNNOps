@@ -35,7 +35,7 @@ metrics:
 
 # Training parameters
 training:
-  training_data_scale_factor: 0.1
+  training_data_scale_factor: 0.5
   sb_ratio: 3
   num_epochs: 30
   batch_size: 128

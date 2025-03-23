@@ -2,8 +2,8 @@
 features:
   TwoBody:
     min_PT_final_state_tracks: 0 # 1
-    sum_PT_final_state_tracks: 1
-    min_FS_IPCHI2_OWNPV: 0
+    sum_PT_final_state_tracks: 0
+    min_FS_IPCHI2_OWNPV: 1
     max_FS_IPCHI2_OWNPV: 0
     TwoBody_PT: 0
     TwoBody_DOCAMAX: 0

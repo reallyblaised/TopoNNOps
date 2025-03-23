@@ -1,11 +1,11 @@
 # feature list : monotonic constraint
 features:
   TwoBody:
-    min_PT_final_state_tracks: 0 # 1
-    sum_PT_final_state_tracks: 1
+    min_PT_final_state_tracks: 1 # 1
+    sum_PT_final_state_tracks: 0
     min_FS_IPCHI2_OWNPV: 0
     max_FS_IPCHI2_OWNPV: 0
-    TwoBody_PT: 0
+    TwoBody_PT: 1
     TwoBody_DOCAMAX: 0
     TwoBody_MCORR: 0
     TwoBody_FDCHI2_OWNPV: 0
