@@ -4,7 +4,7 @@ import pandas as pd
 from pathlib import Path
 from typing import Union, Dict
 import yaml
-
+from torch.utils.data.distributed import DistributedSampler
 
 class LHCbMCModule:
     def __init__(
@@ -153,4 +153,88 @@ class LHCbMCModule:
         self.test_loader = DataLoader(
             test_dataset, batch_size=batch_size, shuffle=True
         )  # shuffling aids the inclusion of both classes in each batch
+        self.input_dim = len(self.feature_cols)
+
+    def setup_distributed(
+        self,
+        batch_size: int = 128,
+        scale_factor: float = 1.0,
+        ratio: float = 0.1,
+        rank: int = 0,
+        world_size: int = 1
+    ):
+        """Setup the DataLoaders for distributed training across multiple GPUs"""
+        train_data = self._process_sb_data(
+            pd.read_pickle(self.train_path),
+            scale_factor=scale_factor,
+            ratio=ratio,
+        )
+        # we can simply load the test data owing to reduced size
+        test_data = self._process_sb_data(
+            pd.read_pickle(self.test_path),
+            scale_factor=scale_factor,
+            ratio=ratio,
+        )
+
+        # Store the channel information
+        self.train_channels = train_data["channel"].values
+        self.test_channels = test_data["channel"].values
+        
+        # fetch the features
+        self.feature_cols = [feat for feat in self.feature_config().keys()]
+        assert len(self.feature_cols) > 0, "No features found in the config file"
+        # Check if the feature columns are in the train_data keys
+        assert all(
+            feat in train_data.columns for feat in self.feature_cols
+        ), f"Missing features in training data: {[feat for feat in self.feature_cols if feat not in train_data.columns]}"
+
+        # HACK: store the full datasets (not just the loaders) - to enable access to channel info for efficiency histograms
+        self.raw_train_data = train_data
+        self.raw_test_data = test_data
+        
+        # prepare the relevant tensors
+        X_train = torch.tensor(
+            train_data[self.feature_cols].values, dtype=torch.float32
+        )
+        y_train = torch.tensor(train_data["class_label"].values, dtype=torch.float32)
+        X_test = torch.tensor(test_data[self.feature_cols].values, dtype=torch.float32)
+        y_test = torch.tensor(test_data["class_label"].values, dtype=torch.float32)
+        
+        # Store the tensors for direct access
+        self.X_train = X_train
+        self.y_train = y_train
+        self.X_test = X_test
+        self.y_test = y_test
+
+        # put together the dataset
+        train_dataset = TensorDataset(X_train, y_train)
+        test_dataset = TensorDataset(X_test, y_test)
+
+        # Set up samplers for distributed training
+        train_sampler = DistributedSampler(
+            train_dataset,
+            num_replicas=world_size,
+            rank=rank,
+            shuffle=True,
+            seed=42
+        )
+        
+        # For test set, we need the same samples on all GPUs for proper evaluation
+        test_sampler = None
+        
+        # create the dataloaders
+        self.train_loader = DataLoader(
+            train_dataset, 
+            batch_size=batch_size, 
+            sampler=train_sampler,
+            shuffle=False  # Sampler handles shuffling
+        )
+        
+        self.test_loader = DataLoader(
+            test_dataset, 
+            batch_size=batch_size, 
+            sampler=test_sampler,
+            shuffle=True  # Regular shuffle for test set
+        )
+        
         self.input_dim = len(self.feature_cols)
