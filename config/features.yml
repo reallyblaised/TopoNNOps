@@ -29,3 +29,15 @@ features:
     ThreeBody_ENDVERTEX_CHI2DOF: 0
     ThreeBody_MCORR: 0
     TwoBody_MCORR: 0
+
+trasforms: # preprocessing: transfrom -> quantile-based clipping -> normalisation
+  TwoBoody:
+    min_PT_final_state_tracks: "gev"
+    sum_PT_final_state_tracks: "gev"
+    min_FS_IPCHI2_OWNPV: "log"
+    max_FS_IPCHI2_OWNPV: "log"
+    TwoBody_PT: "gev"
+    TwoBody_DOCAMAX: ~
+    TwoBody_MCORR: "gev"
+    TwoBody_FDCHI2_OWNPV: "log"
+    TwoBody_ENDVERTEX_CHI2DOF: "log"
