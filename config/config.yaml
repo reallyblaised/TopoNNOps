@@ -20,7 +20,7 @@ defaults:
 
 # Path to features configuration file (with monotonicity constraints)
 trigger: TwoBody
-features_config_path: "config/features_stack.yml"
+features_config_path: "config/features.yml"
 
 # Metrics configuration
 metrics:
@@ -35,9 +35,9 @@ metrics:
 
 # Training parameters
 training:
-  training_data_scale_factor: 0.5
-  sb_ratio: 3
-  num_epochs: 30
+  training_data_scale_factor: 1
+  sb_ratio: ~
+  num_epochs: 50
   batch_size: 128
   loss_fn: "bce_with_logits" # Options: bce_with_logits, focal, combined_focal_wbce, weighted_bce
 
