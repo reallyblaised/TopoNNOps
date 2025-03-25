@@ -65,8 +65,7 @@ class LHCbMCModule:
         # Check if transforms section exists
         transforms = {}
         if "transforms" in config:
-            # Fix possible typo in config (trasforms vs transforms)
-            key = "transforms" if "transforms" in config else "trasforms"
+            key= "transforms" if "transforms" in config else "preprocessing" # for backwards compatibility
             
             # Fix possible spelling differences (TwoBoody vs TwoBody)
             model_key = model
@@ -244,6 +243,7 @@ class LHCbMCModule:
             test_dataset, batch_size=batch_size, shuffle=True
         )  # shuffling aids the inclusion of both classes in each batch
         self.input_dim = len(self.feature_cols)
+        breakpoint()
 
     def setup_distributed(
         self,
@@ -395,4 +395,3 @@ class LHCbMCModule:
         )
         
         self.input_dim = len(self.feature_cols)
-t
