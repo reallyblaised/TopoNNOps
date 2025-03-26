@@ -30,8 +30,8 @@ features:
     ThreeBody_MCORR: 0
     TwoBody_MCORR: 0
 
-trasforms: # preprocessing: transfrom -> quantile-based clipping -> normalisation
-  TwoBoody:
+transforms: # preprocessing: transfrom -> quantile-based clipping -> normalisation
+  TwoBody:
     min_PT_final_state_tracks: "gev"
     sum_PT_final_state_tracks: "gev"
     min_FS_IPCHI2_OWNPV: "log"
