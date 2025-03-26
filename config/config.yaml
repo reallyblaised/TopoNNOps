@@ -1,6 +1,6 @@
 # MLflow configuration
 mlflow:
-  experiment_name: "lhcb_run3_topo_2body_classification_2024_tuning"
+  experiment_name: "twobody_balanced_clip_norm"
   tracking_uri: "http://localhost:5000"  # Update with your MLflow server
   tags:
     project: "Topo2Body Training"

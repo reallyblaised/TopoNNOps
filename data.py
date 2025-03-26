@@ -2,7 +2,7 @@ import torch
 from torch.utils.data import DataLoader, TensorDataset
 import pandas as pd
 from pathlib import Path
-from typing import Union, Dict
+from typing import Union, Dict, List, Tuple
 import yaml
 from torch.utils.data.distributed import DistributedSampler
 from preprocessing import DataPreprocessor
@@ -90,21 +90,31 @@ class LHCbMCModule:
         # Get transformation configs
         transforms_dict = self.transforms_config(model=model, feature_config_file=feature_config_file)
         
+        # Get feature list to identify unchanged vars
+        feature_list = list(self.feature_config(model=model, feature_config_file=feature_config_file).keys())
+        
         # Prepare lists for each transformation type
         gev_vars = []
         log_vars = []
+        unchanged_vars = []
         
         # Parse the transformations
-        for feature, transform_type in transforms_dict.items():
+        for feature in feature_list:
+            transform_type = transforms_dict.get(feature, None)
+            
             if transform_type == "gev":
                 gev_vars.append(feature)
             elif transform_type == "log":
                 log_vars.append(feature)
+            else:
+                # Any feature without an explicit transform goes to unchanged_vars
+                unchanged_vars.append(feature)
         
         # Create preprocessor with proper configs
         self.preprocessor = DataPreprocessor(
             gev_vars=tuple(gev_vars),
             log_vars=tuple(log_vars),
+            unchanged_vars=tuple(unchanged_vars),
             background_channel="minbias",
             clip_quantiles=(0.001, 0.999),
             normalize=True
@@ -188,7 +198,7 @@ class LHCbMCModule:
         # HACK: store the full datasets (not just the loaders) - to enable access to channel info for efficiency histograms
         self.raw_train_data = train_data.copy()
         self.raw_test_data = test_data.copy()
-        
+
         # Apply preprocessing if requested
         if apply_preprocessing:
             # Initialize the preprocessor with transformation configs
@@ -205,25 +215,31 @@ class LHCbMCModule:
             # Transform test data using the same fitted preprocessor
             processed_test = self.preprocessor.transform(subset_test)
             
-            # Extract the processed feature columns
+            # Extract the processed feature columns AND target
             X_train = torch.tensor(
                 processed_train[self.feature_cols].values, dtype=torch.float32
             )
+            y_train = torch.tensor(
+                processed_train["class_label"].values, dtype=torch.float32
+            )
+            
             X_test = torch.tensor(
                 processed_test[self.feature_cols].values, dtype=torch.float32
+            )
+            y_test = torch.tensor(
+                processed_test["class_label"].values, dtype=torch.float32
             )
         else:
             # Use raw unprocessed data
             X_train = torch.tensor(
                 train_data[self.feature_cols].values, dtype=torch.float32
             )
+            y_train = torch.tensor(train_data["class_label"].values, dtype=torch.float32)
+            
             X_test = torch.tensor(
                 test_data[self.feature_cols].values, dtype=torch.float32
             )
-        
-        # Prepare target tensors (always the same regardless of preprocessing)
-        y_train = torch.tensor(train_data["class_label"].values, dtype=torch.float32)
-        y_test = torch.tensor(test_data["class_label"].values, dtype=torch.float32)
+            y_test = torch.tensor(test_data["class_label"].values, dtype=torch.float32) 
         
         # Store the tensors for direct access
         self.X_train = X_train
@@ -243,7 +259,6 @@ class LHCbMCModule:
             test_dataset, batch_size=batch_size, shuffle=True
         )  # shuffling aids the inclusion of both classes in each batch
         self.input_dim = len(self.feature_cols)
-        breakpoint()
 
     def setup_distributed(
         self,
@@ -332,12 +347,19 @@ class LHCbMCModule:
                 processed_train = self.preprocessor.transform(subset_train)
                 processed_test = self.preprocessor.transform(subset_test)
             
-            # Extract the processed feature columns
+            # Extract the processed feature columns AND target values
             X_train = torch.tensor(
                 processed_train[self.feature_cols].values, dtype=torch.float32
             )
+            y_train = torch.tensor(
+                processed_train["class_label"].values, dtype=torch.float32
+            )
+            
             X_test = torch.tensor(
                 processed_test[self.feature_cols].values, dtype=torch.float32
+            )
+            y_test = torch.tensor(
+                processed_test["class_label"].values, dtype=torch.float32
             )
             
             # Clean up the temporary file
@@ -349,13 +371,16 @@ class LHCbMCModule:
             X_train = torch.tensor(
                 train_data[self.feature_cols].values, dtype=torch.float32
             )
+            y_train = torch.tensor(train_data["class_label"].values, dtype=torch.float32)
+            
             X_test = torch.tensor(
                 test_data[self.feature_cols].values, dtype=torch.float32
             )
-        
-        # Prepare target tensors (always the same regardless of preprocessing)
-        y_train = torch.tensor(train_data["class_label"].values, dtype=torch.float32)
-        y_test = torch.tensor(test_data["class_label"].values, dtype=torch.float32)
+            y_test = torch.tensor(test_data["class_label"].values, dtype=torch.float32)
+
+        # Add shape sanity checks
+        assert X_train.shape[0] == y_train.shape[0], "Shape mismatch between X_train and y_train"
+        assert X_test.shape[0] == y_test.shape[0], "Shape mismatch between X_test and y_test"
         
         # Store the tensors for direct access
         self.X_train = X_train
