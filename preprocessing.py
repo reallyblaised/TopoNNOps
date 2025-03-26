@@ -16,6 +16,7 @@ class DataPreprocessor:
         self,
         gev_vars: Tuple[str, ...] = None,
         log_vars: Tuple[str, ...] = None,
+        unchanged_vars: Tuple[str, ...] = None,  # New parameter
         background_channel: str = 'minbias',
         clip_quantiles: Tuple[float, float] = (0.001, 0.999),
         normalize: bool = True
@@ -29,6 +30,8 @@ class DataPreprocessor:
             Variables to be converted from MeV to GeV (divide by 1000)
         log_vars : tuple of str
             Variables to be log-transformed
+        unchanged_vars : tuple of str
+            Variables to include in normalization without any prior transformation
         background_channel : str
             Name of the background channel in the dataset
         clip_quantiles : tuple of (lower, upper)
@@ -38,6 +41,7 @@ class DataPreprocessor:
         """
         self.gev_vars = gev_vars or ()
         self.log_vars = log_vars or ()
+        self.unchanged_vars = unchanged_vars or ()  # Store the new parameter
         self.background_channel = background_channel
         self.clip_quantiles = clip_quantiles
         self.normalize = normalize
@@ -48,6 +52,8 @@ class DataPreprocessor:
             self.transformations[var] = "gev"
         for var in self.log_vars:
             self.transformations[var] = "log"
+        for var in self.unchanged_vars:
+            self.transformations[var] = "none"  # Add unchanged variables
             
         # Statistics from training data (to be filled during fit)
         self.feature_stats = {}
@@ -95,6 +101,9 @@ class DataPreprocessor:
                 
                 # Store epsilon for this feature
                 self.feature_stats[f"{column}_epsilon"] = epsilon
+            elif transform_type == "none":
+                # No transformation needed for unchanged variables
+                pass
             
             # Calculate clipping bounds
             lower_bound = np.nanquantile(values, self.clip_quantiles[0])
@@ -103,7 +112,7 @@ class DataPreprocessor:
             # Store bounds for this feature
             self.feature_stats[f"{column}_lower"] = lower_bound
             self.feature_stats[f"{column}_upper"] = upper_bound
-            
+
             # Calculate normalization parameters if needed
             if self.normalize:
                 # Apply clipping for calculating normalization bounds
@@ -151,6 +160,9 @@ class DataPreprocessor:
             elif transform_type == "log":
                 epsilon = self.feature_stats.get(f"{column}_epsilon", 1e-6)
                 result_df[column] = np.log(result_df[column] + epsilon)
+            elif transform_type == "none":
+                # No transformation for unchanged variables
+                pass
             
             # Apply clipping
             lower = self.feature_stats.get(f"{column}_lower")
@@ -321,6 +333,7 @@ class DataPreprocessor:
             pickle.dump({
                 'gev_vars': self.gev_vars,
                 'log_vars': self.log_vars,
+                'unchanged_vars': self.unchanged_vars,  # Save the new parameter
                 'background_channel': self.background_channel,
                 'clip_quantiles': self.clip_quantiles,
                 'normalize': self.normalize,
@@ -351,6 +364,7 @@ class DataPreprocessor:
         preprocessor = cls(
             gev_vars=config['gev_vars'],
             log_vars=config['log_vars'],
+            unchanged_vars=config.get('unchanged_vars', ()),  # Handle loading from older files
             background_channel=config['background_channel'],
             clip_quantiles=config['clip_quantiles'],
             normalize=config['normalize']
