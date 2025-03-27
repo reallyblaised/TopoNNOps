@@ -40,9 +40,10 @@ training:
   num_epochs: 50
   batch_size: 128
   loss_fn: "bce_with_logits" # Options: bce_with_logits, focal, combined_focal_wbce, weighted_bce
+  apply_preprocessing: True
 
 # Data paths
 paths:
-  train_data: "/ceph/submit/data/user/b/blaised/hlt2topo_sp/scratch/TwoBody/preprocessed/train.pkl"
-  test_data: "/ceph/submit/data/user/b/blaised/hlt2topo_sp/scratch/TwoBody/preprocessed/test.pkl"
+  train_data: "/ceph/submit/data/user/b/blaised/hlt2topo_sp/scratch/TwoBody/imbalanced/train.pkl" # no preprocessing from data pipeline; handles by DataModule here()
+  test_data: "/ceph/submit/data/user/b/blaised/hlt2topo_sp/scratch/TwoBody/imbalanced/test.pkl" # idem
   model_save_dir: "./models"

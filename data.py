@@ -208,13 +208,13 @@ class LHCbMCModule:
             # Only preprocess the feature columns
             subset_train = train_data[self.feature_cols + ["class_label", "channel"]]
             subset_test = test_data[self.feature_cols + ["class_label", "channel"]]
-            
+
             # Fit and transform on training data
             processed_train = self.preprocessor.fit_transform(subset_train, balance=True)
-            
+
             # Transform test data using the same fitted preprocessor
             processed_test = self.preprocessor.transform(subset_test)
-            
+
             # Extract the processed feature columns AND target
             X_train = torch.tensor(
                 processed_train[self.feature_cols].values, dtype=torch.float32

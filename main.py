@@ -235,7 +235,8 @@ def train_process(rank, world_size, cfg):
             scale_factor=cfg.training.get("training_data_scale_factor", 1.0),
             ratio=cfg.training.get("sb_ratio", 0.01),
             rank=rank,
-            world_size=world_size
+            world_size=world_size,
+            apply_preprocessing=cfg.training.get("apply_preprocessing", True),
         )
         
         if is_master:
@@ -268,7 +269,7 @@ def train_process(rank, world_size, cfg):
             grad_clip_val=cfg.training.get("grad_clip_val", None),
             use_mixed_precision=cfg.training.get("use_mixed_precision", False),
             is_distributed=True,
-            is_master=is_master
+            is_master=is_master,
         )
         
         # Provide access to the data module for visualization
@@ -388,6 +389,7 @@ def single_gpu_training(cfg: DictConfig) -> None:
                 batch_size=cfg.training.batch_size,
                 scale_factor=cfg.training.get("training_data_scale_factor", 1.0),
                 ratio=cfg.training.get("sb_ratio", 0.01),
+                apply_preprocessing=cfg.training.get("apply_preprocessing", True),
             )
             
             logger.info(f"Input features: {data_module.feature_cols}")
