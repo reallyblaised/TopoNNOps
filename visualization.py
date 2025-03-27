@@ -646,12 +646,9 @@ class ModelPerformance:
                 if pt_min is not None and pt_max is not None:
                     # Apply inverse transform: normalized_value * (max - min) + min
                     pt_values = pt_values * (pt_max - pt_min) + pt_min
-                    
-                    # Log the transformation for debugging
-                    print(f"Denormalized {feature_name} from [0,1] to [{pt_min:.3f}, {pt_max:.3f}] GeV")
         # -----------------------------------------------
         # DENORMALIZATION CODE ENDS
-        breakpoint()
+
         # Define cut values
         cut_values = [0.75, 0.95, 0.99, 0.995]
         
@@ -1122,7 +1119,28 @@ class ModelPerformance:
             return alt.Chart(pd.DataFrame({'message': [f'Channel data shape mismatch for dynamic thresholds']})).mark_text().encode(
                 text='message:N'
             ).properties(width=800, height=200)
-        
+
+        # DENORMALIZATION CODE STARTS
+        # -----------------------------------------------
+        # Check if we have a preprocessor available
+        if hasattr(self, 'preprocessor') and self.preprocessor is not None:
+            feature_name = 'TwoBody_PT'
+            
+            # Check if the preprocessor normalized this feature
+            if (hasattr(self.preprocessor, 'normalize') and 
+                self.preprocessor.normalize and 
+                hasattr(self.preprocessor, 'feature_stats')):
+                
+                # Get the min/max values used for normalization (stored during fit)
+                pt_min = self.preprocessor.feature_stats.get(f'{feature_name}_min')
+                pt_max = self.preprocessor.feature_stats.get(f'{feature_name}_max')
+                
+                if pt_min is not None and pt_max is not None:
+                    # Apply inverse transform: normalized_value * (max - min) + min
+                    pt_values = pt_values * (pt_max - pt_min) + pt_min
+        # -----------------------------------------------
+        # DENORMALIZATION CODE ENDS
+
         # Define target rejection rates
         target_rejection_rates = [0.995, 0.999]
         
