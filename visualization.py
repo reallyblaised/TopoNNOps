@@ -630,20 +630,25 @@ class ModelPerformance:
 
         # DENORMALIZATION CODE STARTS
         # -----------------------------------------------
-        # Get stored preprocessor from create_performance_dashboard
-        if hasattr(self, '_preprocessor') and self._preprocessor is not None:
+        # Check if we have a preprocessor available
+        if hasattr(self, 'preprocessor') and self.preprocessor is not None:
             feature_name = 'TwoBody_PT'
             
-            # Check if this feature was normalized
-            if hasattr(self.preprocessor, 'normalize') and self.preprocessor.normalize and hasattr(self.preprocessor, 'transformations') and feature_name in self.preprocessor.transformations:
-                # Get the min/max values used for normalization
-                if hasattr(self.preprocessor, 'feature_stats'):
-                    pt_min = self.preprocessor.feature_stats.get(f'{feature_name}_min')
-                    pt_max = self.preprocessor.feature_stats.get(f'{feature_name}_max')
+            # Check if the preprocessor normalized this feature
+            if (hasattr(self.preprocessor, 'normalize') and 
+                self.preprocessor.normalize and 
+                hasattr(self.preprocessor, 'feature_stats')):
+                
+                # Get the min/max values used for normalization (stored during fit)
+                pt_min = self.preprocessor.feature_stats.get(f'{feature_name}_min')
+                pt_max = self.preprocessor.feature_stats.get(f'{feature_name}_max')
+                
+                if pt_min is not None and pt_max is not None:
+                    # Apply inverse transform: normalized_value * (max - min) + min
+                    pt_values = pt_values * (pt_max - pt_min) + pt_min
                     
-                    if pt_min is not None and pt_max is not None:
-                        # Denormalize PT values to the original scale (but still in GeV)
-                        pt_values = pt_values * (pt_max - pt_min) + pt_min 
+                    # Log the transformation for debugging
+                    print(f"Denormalized {feature_name} from [0,1] to [{pt_min:.3f}, {pt_max:.3f}] GeV")
         # -----------------------------------------------
         # DENORMALIZATION CODE ENDS
         breakpoint()
