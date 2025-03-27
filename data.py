@@ -17,7 +17,7 @@ class LHCbMCModule:
         """Initializes the LHCbMCModule with paths to training and testing data."""
         self.train_path = train_data_path
         self.test_path = test_data_path
-        self.preprocessor = None  # Will be initialized in setup
+        self._preprocessor = None  # Will be initialized in setup
 
     @staticmethod
     def _get_features_config_path(filename: str) -> Path:
@@ -111,7 +111,7 @@ class LHCbMCModule:
                 unchanged_vars.append(feature)
         
         # Create preprocessor with proper configs
-        self.preprocessor = DataPreprocessor(
+        self._preprocessor = DataPreprocessor(
             gev_vars=tuple(gev_vars),
             log_vars=tuple(log_vars),
             unchanged_vars=tuple(unchanged_vars),
@@ -119,6 +119,11 @@ class LHCbMCModule:
             clip_quantiles=(0.001, 0.999),
             normalize=True
         )
+
+    # Add this to the LHCbMCModule class in data.py
+    def get_preprocessor(self):
+        """Get the data preprocessor instance"""
+        return self._preprocessor if hasattr(self, '_preprocessor') else None
 
     def _process_sb_data(
         self, train_data: pd.DataFrame, scale_factor: float = 1.0, ratio: float = 0.1

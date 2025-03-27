@@ -323,11 +323,14 @@ class Trainer:
             channels = self.data_module.test_channels if hasattr(self.data_module, 'test_channels') else None
             
             try:
+                processor = self.data_module.preprocessor if hasattr(self.data_module, 'preprocessor') else None
+
                 # Create performance dashboard
                 self.performance.create_performance_dashboard(
                     X_viz.cpu().numpy(), y_viz.numpy(), 
                     history, epoch,
-                    channels=channels
+                    channels=channels,
+                    preprocessor=processor, # pass to invert [0,1]-scaling in visualization
                 )
                 
                 # Visualize weights if needed - uncomment this for weight visualizations

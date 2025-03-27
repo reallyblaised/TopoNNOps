@@ -26,7 +26,8 @@ class ModelPerformance:
     def create_performance_dashboard(
         self, X_test: np.ndarray, y_test: np.ndarray, 
         history: dict, epoch: int,
-        channels: Optional[np.ndarray] = None
+        channels: Optional[np.ndarray] = None,
+        preprocessor: Optional[object] = None # fetch the preprocessor to invert the [0,1]-normalisation
     ) -> None:
         """
         Create and log performance metrics dashboard with efficiency histograms.
@@ -38,6 +39,9 @@ class ModelPerformance:
             epoch: Current epoch number
             channels: Array of channel labels for each sample (optional)
         """
+        # Fetch the preprocessor object 
+        self.preprocessor = preprocessor
+
         # Get predictions
         y_test_pred = self._get_predictions(X_test)
         
@@ -623,7 +627,26 @@ class ModelPerformance:
                 pt_index = self.feature_names.index('TwoBody_PT')
             
             pt_values = X[:, pt_index]
-        
+
+        # DENORMALIZATION CODE STARTS
+        # -----------------------------------------------
+        # Get stored preprocessor from create_performance_dashboard
+        if hasattr(self, '_preprocessor') and self._preprocessor is not None:
+            feature_name = 'TwoBody_PT'
+            
+            # Check if this feature was normalized
+            if hasattr(self.preprocessor, 'normalize') and self.preprocessor.normalize and hasattr(self.preprocessor, 'transformations') and feature_name in self.preprocessor.transformations:
+                # Get the min/max values used for normalization
+                if hasattr(self.preprocessor, 'feature_stats'):
+                    pt_min = self.preprocessor.feature_stats.get(f'{feature_name}_min')
+                    pt_max = self.preprocessor.feature_stats.get(f'{feature_name}_max')
+                    
+                    if pt_min is not None and pt_max is not None:
+                        # Denormalize PT values to the original scale (but still in GeV)
+                        pt_values = pt_values * (pt_max - pt_min) + pt_min 
+        # -----------------------------------------------
+        # DENORMALIZATION CODE ENDS
+        breakpoint()
         # Define cut values
         cut_values = [0.75, 0.95, 0.99, 0.995]
         
