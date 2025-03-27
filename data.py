@@ -120,9 +120,10 @@ class LHCbMCModule:
             normalize=True
         )
 
-    # Add this to the LHCbMCModule class in data.py
-    def get_preprocessor(self):
-        """Get the data preprocessor instance"""
+    # expose the processor to access it in visualize.py 
+    @property
+    def preprocessor(self):
+        """Expose the preprocessor for external use"""
         return self._preprocessor if hasattr(self, '_preprocessor') else None
 
     def _process_sb_data(
@@ -215,10 +216,10 @@ class LHCbMCModule:
             subset_test = test_data[self.feature_cols + ["class_label", "channel"]]
 
             # Fit and transform on training data
-            processed_train = self.preprocessor.fit_transform(subset_train, balance=True)
+            processed_train = self._preprocessor.fit_transform(subset_train, balance=True)
 
             # Transform test data using the same fitted preprocessor
-            processed_test = self.preprocessor.transform(subset_test)
+            processed_test = self._preprocessor.transform(subset_test)
 
             # Extract the processed feature columns AND target
             X_train = torch.tensor(
@@ -320,15 +321,15 @@ class LHCbMCModule:
             # Master rank does the fitting and shares the preprocessor with other ranks
             if rank == 0:
                 # Fit and transform on training data
-                processed_train = self.preprocessor.fit_transform(subset_train, balance=True)
+                processed_train = self._preprocessor.fit_transform(subset_train, balance=True)
                 
                 # Transform test data using the same fitted preprocessor
-                processed_test = self.preprocessor.transform(subset_test)
+                processed_test = self._preprocessor.transform(subset_test)
                 
                 # Save preprocessor to a temporary file to share with other ranks
                 import tempfile
                 with tempfile.NamedTemporaryFile(suffix='.pkl', delete=False) as f:
-                    self.preprocessor.save(f.name)
+                    self._preprocessor.save(f.name)
                     temp_path = f.name
             else:
                 # Other ranks wait for master to finish preprocessing
@@ -346,11 +347,11 @@ class LHCbMCModule:
                     time.sleep(1)
                 
                 # Load the preprocessor
-                self.preprocessor = DataPreprocessor.load(temp_path)
+                self._preprocessor = DataPreprocessor.load(temp_path)
                 
                 # Transform the data using the loaded preprocessor
-                processed_train = self.preprocessor.transform(subset_train)
-                processed_test = self.preprocessor.transform(subset_test)
+                processed_train = self._preprocessor.transform(subset_train)
+                processed_test = self._preprocessor.transform(subset_test)
             
             # Extract the processed feature columns AND target values
             X_train = torch.tensor(
