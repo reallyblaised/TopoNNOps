@@ -1,7 +1,7 @@
 identifier: "unconstrained" # Identifier for the model configuration for logging and bookeeping
 
 # Default model configuration
-layer_dims: [32, 32, 32, 32, 32, 32, 32]
+layer_dims: [128, 128, 128, 128, 128, 128, 128]
 dropout_rate: 0.0
 batch_norm: false
 activation_fn: "leaky_relu"

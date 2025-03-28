@@ -653,7 +653,7 @@ class ModelPerformance:
         cut_values = [0.75, 0.95, 0.99, 0.995]
         
         # Selected signal channels to analyze
-        selected_channels = ['Bs_JpsiPhi', 'Bp_KpJpsi', 'B0_D0pipi', 'B0_DpDm', 'B0_Dstmunu', 'Bm_D0K']
+        selected_channels = ['JpsiPhi', 'Bp_kpJpsi', 'D0pi', 'D0pipi', 'B0_Dstmunu'] 
         
         # Define PT bins from 0 to 20 GeV in 1 GeV increments
         pt_bins = np.linspace(0, 20, 21)  # 21 points to get 20 bins of 1.0 GeV each
@@ -1151,7 +1151,7 @@ class ModelPerformance:
             dynamic_thresholds[rate] = threshold
         
         # Selected signal channels to analyze
-        selected_channels = ['Bs_JpsiPhi', 'Bp_KpJpsi', 'B0_D0pipi', 'B0_DpDm', 'B0_Dstmunu', 'Bm_D0K'] 
+        selected_channels = ['JpsiPhi', 'Bp_kpJpsi', 'D0pi', 'D0pipi', 'B0_Dstmunu'] 
         
         # Define PT bins from 0 to 20 GeV in 1 GeV increments
         pt_bins = np.linspace(0, 20, 21)  # 21 points to get 20 bins of 1.0 GeV each

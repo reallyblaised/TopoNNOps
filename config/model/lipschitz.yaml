@@ -1,11 +1,11 @@
 identifier: lipschitz # Identifier for the model configuration for logging and bookeeping
 
 # hidden layer dimensions
-layer_dims: [32, 32, 32, 32, 32, 32, 32]
+layer_dims: [128, 128, 128, 128, 128, 128, 128]
 
 # Lipschitz-specific parameters
 activation_fn: "groupsort"
-lip_const: 1.0
+lip_const: 2.0
 nbody: "TwoBody"
 monotonic: false  # Flag to enforce monotonicity constraints
 lip_kind: "nominal" # options: `one`, `default`, `nominal`

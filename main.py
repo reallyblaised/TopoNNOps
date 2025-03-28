@@ -237,6 +237,7 @@ def train_process(rank, world_size, cfg):
             rank=rank,
             world_size=world_size,
             apply_preprocessing=cfg.training.get("apply_preprocessing", True),
+            balance_train_sample=cfg.training.get("balance_train_sample", True),
         )
         
         if is_master:
@@ -390,6 +391,7 @@ def single_gpu_training(cfg: DictConfig) -> None:
                 scale_factor=cfg.training.get("training_data_scale_factor", 1.0),
                 ratio=cfg.training.get("sb_ratio", 0.01),
                 apply_preprocessing=cfg.training.get("apply_preprocessing", True),
+                balance_train_sample=cfg.training.get("balance_train_sample", False),
             )
             
             logger.info(f"Input features: {data_module.feature_cols}")

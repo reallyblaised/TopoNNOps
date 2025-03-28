@@ -58,7 +58,7 @@ class DataPreprocessor:
         # Statistics from training data (to be filled during fit)
         self.feature_stats = {}
     
-    def fit(self, df: pd.DataFrame, balance_first: bool = True, min_count: Optional[int] = None) -> 'DataPreprocessor':
+    def fit(self, df: pd.DataFrame, balance_first: bool = False, min_count: Optional[int] = None) -> 'DataPreprocessor':
         """
         Calculate necessary statistics from training data for later transformation.
         
@@ -219,7 +219,7 @@ class DataPreprocessor:
     def fit_transform(
         self, 
         df: pd.DataFrame, 
-        balance: bool = True, 
+        balance: bool = False, 
         min_count: Optional[int] = None,
         preserve_originals: bool = True
     ) -> pd.DataFrame:
@@ -247,7 +247,7 @@ class DataPreprocessor:
         balanced_df = self.balance_signal(df, min_count=min_count) if balance else df
         
         # Step 2: Fit on balanced data
-        self.fit(balanced_df, balance_first=False)  # Already balanced
+        self.fit(balanced_df, balance_first=balance)  # Already balanced
         
         # Step 3: Process using the fitted parameters
         # Either transform the balanced data or re-balance and transform the original

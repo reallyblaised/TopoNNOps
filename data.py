@@ -171,7 +171,8 @@ class LHCbMCModule:
 
     def setup(
         self, batch_size: int = 128, scale_factor: float = 1.0, ratio: float = 0.1,
-        feature_config_file: str = "features.yml", apply_preprocessing: bool = True
+        feature_config_file: str = "features.yml", apply_preprocessing: bool = True, 
+        balance_train_sample: bool = False
     ):
         """Setup the DataLoaders for training and testing data with preprocessing."""
         # Load and sample the data
@@ -204,7 +205,7 @@ class LHCbMCModule:
         # HACK: store the full datasets (not just the loaders) - to enable access to channel info for efficiency histograms
         self.raw_train_data = train_data.copy()
         self.raw_test_data = test_data.copy()
-
+        
         # Apply preprocessing if requested
         if apply_preprocessing:
             # Initialize the preprocessor with transformation configs
@@ -216,7 +217,7 @@ class LHCbMCModule:
             subset_test = test_data[self.feature_cols + ["class_label", "channel"]]
 
             # Fit and transform on training data
-            processed_train = self._preprocessor.fit_transform(subset_train, balance=True)
+            processed_train = self._preprocessor.fit_transform(subset_train, balance=balance_train_sample)
 
             # Transform test data using the same fitted preprocessor
             processed_test = self._preprocessor.transform(subset_test)
@@ -274,7 +275,8 @@ class LHCbMCModule:
         rank: int = 0,
         world_size: int = 1,
         feature_config_file: str = "features.yml",
-        apply_preprocessing: bool = True
+        apply_preprocessing: bool = True,
+        balance_train_sample: bool = False,
     ):
         """Setup the DataLoaders for distributed training across multiple GPUs with preprocessing"""
         # Load and sample the data
@@ -321,7 +323,7 @@ class LHCbMCModule:
             # Master rank does the fitting and shares the preprocessor with other ranks
             if rank == 0:
                 # Fit and transform on training data
-                processed_train = self._preprocessor.fit_transform(subset_train, balance=True)
+                processed_train = self._preprocessor.fit_transform(subset_train, balance=balance_train_sample)
                 
                 # Transform test data using the same fitted preprocessor
                 processed_test = self._preprocessor.transform(subset_test)
