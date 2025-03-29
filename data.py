@@ -248,6 +248,9 @@ class LHCbMCModule:
             )
             y_test = torch.tensor(test_data["class_label"].values, dtype=torch.float32) 
         
+        # HACK - print the population to get a feel for the signal abundance relative to bkg
+        print(f"Ad-hoc debug: {processed_train.channel.value_counts()}")
+
         # Store the tensors for direct access
         self.X_train = X_train
         self.y_train = y_train

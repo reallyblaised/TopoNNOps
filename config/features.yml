@@ -2,10 +2,10 @@
 features:
   TwoBody:
     min_PT_final_state_tracks: 1
-    sum_PT_final_state_tracks: 0 # 1
+    sum_PT_final_state_tracks: 1 # 1
     min_FS_OWNPVIPCHI2: 1
     max_FS_OWNPVIPCHI2: 0
-    TwoBody_PT: 0
+    TwoBody_PT: 1
     TwoBody_MAXDOCA: 0
     TwoBody_OWNPVCORRM: 0
     TwoBody_OWNPVFDCHI2: 0
@@ -34,10 +34,10 @@ transforms: # preprocessing: transfrom -> quantile-based clipping -> normalisati
   TwoBody:
     min_PT_final_state_tracks: "gev"
     sum_PT_final_state_tracks: "gev"
-    min_FS_IPCHI2_OWNPV: "log"
-    max_FS_IPCHI2_OWNPV: "log"
+    min_FS_OWNPVIPCHI2: "log"
+    max_FS_OWNPVIPCHI2: "log"
     TwoBody_PT: "gev"
-    TwoBody_DOCAMAX: ~
-    TwoBody_MCORR: "gev"
-    TwoBody_FDCHI2_OWNPV: "log"
+    TwoBody_MAXDOCA: ~
+    TwoBody_OWNPVCORRM: "gev"
+    TwoBody_OWNPVFDCHI2: "log"
     TwoBody_ENDVERTEX_CHI2DOF: "log"
