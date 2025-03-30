@@ -2,7 +2,7 @@
 features:
   TwoBody:
     min_PT_final_state_tracks: 1
-    sum_PT_final_state_tracks: 0 # 1
+    sum_PT_final_state_tracks: 0 
     min_FS_OWNPVIPCHI2: 1
     max_FS_OWNPVIPCHI2: 0
     TwoBody_PT: 0

@@ -1,9 +1,9 @@
 # MLflow configuration
 mlflow:
-  experiment_name: "twobody_balanced_clip_norm"
+  experiment_name: "twobody_balanced_clip_norm_mon_nominal"
   tracking_uri: "http://localhost:5000"  # Update with your MLflow server
   tags:
-    project: "Topo2Body Training"
+    project: "TopoNBody Training [inclusive B]"
     version: "1.0"
 
 # simple config
@@ -48,3 +48,4 @@ paths:
   train_data: "/ceph/submit/data/user/b/blaised/hlt2topo_sp_2025/scratch/TwoBody_2025_IMbalanced/train.pkl" # no preprocessing from data pipeline; handles by DataModule here()
   test_data: "/ceph/submit/data/user/b/blaised/hlt2topo_sp_2025/scratch/TwoBody_2025_IMbalanced/test.pkl" # idem
   model_save_dir: "./models"
+  
