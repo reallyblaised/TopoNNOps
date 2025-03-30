@@ -9,7 +9,7 @@ import mlflow
 import os
 import logging
 from typing import Union, List
-from models import UnconstrainedNet, LipschitzNet
+from models import UnconstrainedNet, LipschitzNet, LipschitzLegacyNet
 from trainer import Trainer
 from data import LHCbMCModule
 from loss import FocalLoss, CombinedFocalBCELoss, WeightedBCELoss
@@ -71,6 +71,22 @@ def get_model(cfg: DictConfig, input_dim: int, feature_names: List[str]) -> nn.M
             lip_kind=lip_kind
         )
     
+    # For legacy Lipschitz model
+    elif architecture == "lipschitz_legacy":
+        # Extract relevant parameters
+        lip_const = cfg.model.get("lip_const", 1.0)
+        nbody = cfg.model.get("nbody", "TwoBody")
+        monotonic = cfg.model.get("monotonic", False)
+        
+        return LipschitzLegacyNet(
+            input_dim=input_dim,
+            feature_names=feature_names,
+            lip_const=lip_const,
+            monotonic=monotonic,
+            nbody=nbody,
+            features_config_path=cfg.features_config_path
+        )
+
     # Unknown architecture
     else:
         raise ValueError(f"Unsupported model architecture: {architecture}")

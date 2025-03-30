@@ -6,6 +6,9 @@ import yaml
 from pathlib import Path
 import sys
 import monotonicnetworks as lmn
+from monotonenorm import SigmaNet as sigmanet_legacy
+from monotonenorm import GroupSort as groupsort_legacy
+from monotonenorm import direct_norm as direct_norm_legacy  
 
 class UnconstrainedNet(nn.Module):
     """
@@ -412,5 +415,162 @@ class LipschitzNet(nn.Module):
                 print(f"  - monotonic_constraints={monotonic_repr}")
             else:
                 print(f"  - monotonic_constraints={monotonic_constraints}")
+        
+        print("=============================================\n")
+
+
+# compare to legacy implementation
+class LipschitzLegacyNet(nn.Module):
+    """
+    Legacy implementation of Lipschitz constrained neural network.
+    
+    This class implements the original fixed architecture with 32-64-32 nodes
+    following the legacy code structure as closely as possible.
+    """
+    
+    def __init__(
+        self,
+        input_dim: int,
+        feature_names: List[str],
+        lip_const: float = 1.0,
+        monotonic: bool = False,
+        nbody: str = "TwoBody",
+        features_config_path: str = "config/features.yml"
+    ):
+        """
+        Initialize a legacy Lipschitz-constrained neural network.
+        """
+        super().__init__()
+        self.input_dim = input_dim
+        self.feature_names = feature_names
+        self.lip_const = lip_const
+        self.monotonic = monotonic
+        self.nbody = nbody
+        self.features_config_path = features_config_path
+        
+        # Build the legacy model
+        self.model = self._build_legacy_model()
+    
+    def _build_legacy_model(self):
+        """Build the legacy model with fixed architecture"""
+        # Flag to indicate if we're using robust (Lipschitz) constraints
+        robust = True  # Always true for LipschitzLegacyNet
+        
+        # Define lipschitz_norm function as in the original code
+        def lipschitz_norm(module, is_norm=False, _kind="one"):
+            if not robust:
+                print("Running with unconstrained NN")
+                return module
+            else:
+                print("Booked Lip NN")
+                print(is_norm, _kind)
+                return direct_norm_legacy(
+                    module,
+                    always_norm=is_norm,
+                    kind=_kind,
+                    max_norm=float(self.lip_const) ** (1 / 4),
+                )
+        
+        # Build model exactly as in the original code
+        model = nn.Sequential(
+            lipschitz_norm(nn.Linear(len(self.feature_names), 32)), 
+            groupsort_legacy(32 // 2),
+            lipschitz_norm(nn.Linear(32, 64)), 
+            groupsort_legacy(64 // 2),
+            lipschitz_norm(nn.Linear(64, 32)), 
+            groupsort_legacy(32 // 2),
+            lipschitz_norm(nn.Linear(32, 1)), 
+        )
+        
+        # Apply SigmaNet wrapper if using monotonicity
+        if robust:
+            print("NOTE: running with monotonicity/robustness in place")
+            print(f"Lambda: {self.lip_const}")
+            
+            if self.monotonic:
+                # Load monotonicity constraints from config file
+                _monotone_constraints = self._load_monotone_constrs(
+                    self.features_config_path, self.nbody
+                )
+            else:
+                # No monotonicity constraints - all zeros
+                _monotone_constraints = list(np.zeros(len(self.feature_names)))
+                # Print feature names and constraints
+                for i in range(len(self.feature_names)):
+                    print(self.feature_names[i], _monotone_constraints[i])
+            
+            # Ensure correct number of constraints
+            assert len(_monotone_constraints) == len(self.feature_names)
+            
+            # Wrap model with SigmaNet for Lipschitz and monotonicity constraints
+            model = sigmanet_legacy(model, sigma=self.lip_const, monotone_constraints=_monotone_constraints)
+        
+        print(model)
+        return model
+    
+    def _load_monotone_constrs(self, path: str, key: str) -> List[int]:
+        """Load monotonicity constraints from config file."""
+        try:
+            with open(path, 'r') as f:
+                config = yaml.safe_load(f)
+            
+            if 'features' not in config:
+                raise ValueError(f"No 'features' section found in {path}")
+            
+            if key not in config['features']:
+                raise ValueError(f"No '{key}' section found in features configuration")
+            
+            # Get the feature constraints
+            feature_dict = config['features'][key]
+            
+            # If feature_names is provided, use it to order the constraints
+            if self.feature_names:
+                monotone_constraints = []
+                for feature in self.feature_names:
+                    if feature in feature_dict:
+                        monotone_constraints.append(int(feature_dict[feature]))
+                    else:
+                        raise ValueError(f"Feature {feature} not found in config for {key}")
+                return monotone_constraints
+            
+            # Otherwise, just return all constraints in the order from the file
+            return list(feature_dict.values())
+            
+        except Exception as e:
+            print(f"Error loading monotonicity constraints: {str(e)}")
+            # Return a list of zeros (no monotonicity constraints)
+            return [0] * self.input_dim
+    
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass through the model."""
+        return self.model(x)
+    
+    def get_l1_loss(self) -> torch.Tensor:
+        """Return zero L1 regularization loss."""
+        return torch.tensor(0.0, device=next(self.parameters()).device)
+    
+    def print_architecture_details(self):
+        """Print detailed information about the legacy model architecture."""
+        print("\n===== LipschitzLegacyNet Architecture Details =====")
+        print(f"Input dimension: {self.input_dim}")
+        print(f"Legacy fixed architecture: 32-64-32 neurons")
+        print(f"Lipschitz constant: {self.lip_const}")
+        print(f"Monotonicity enabled: {self.monotonic}")
+        print(f"NBodies setting: {self.nbody}")
+        
+        # Print monotonicity constraints
+        monotonic_constraints = self._load_monotone_constrs(
+            self.features_config_path, self.nbody
+        )
+        print(f"Monotonicity constraints array: {monotonic_constraints}")
+        
+        if self.feature_names:
+            print("\nFeature-by-feature monotonicity settings:")
+            for i, feature in enumerate(self.feature_names):
+                constraint_value = monotonic_constraints[i] if i < len(monotonic_constraints) else 0
+                constraint_desc = "increasing" if constraint_value == 1 else \
+                            "decreasing" if constraint_value == -1 else "none"
+                status = "ACTIVE" if self.monotonic and constraint_value != 0 else "inactive"
+                print(f"  - {feature}: {constraint_desc} ({constraint_value}) - {status}")
         
         print("=============================================\n")

@@ -37,7 +37,7 @@ metrics:
 training:
   training_data_scale_factor: 1
   sb_ratio: 1 # more physically correct (training and test have S>>B!) and yielding better training stability; evaluation on per-channel basis in terms of effs confirms this. In the limit of high stats, preferable
-  num_epochs: 50
+  num_epochs: 25
   batch_size: 128
   loss_fn: "bce_with_logits" # Options: bce_with_logits, focal, combined_focal_wbce, weighted_bce
   apply_preprocessing: True
