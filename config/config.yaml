@@ -35,9 +35,9 @@ metrics:
 
 # Training parameters
 training:
-  training_data_scale_factor: 1
+  training_data_scale_factor: 1 # default: 1; full minimum bias
   sb_ratio: 1 # more physically correct (training and test have S>>B!) and yielding better training stability; evaluation on per-channel basis in terms of effs confirms this. In the limit of high stats, preferable
-  num_epochs: 25
+  num_epochs: 150
   batch_size: 128
   loss_fn: "bce_with_logits" # Options: bce_with_logits, focal, combined_focal_wbce, weighted_bce
   apply_preprocessing: True
