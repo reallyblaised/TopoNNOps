@@ -5,7 +5,7 @@ features:
     sum_PT_final_state_tracks: 0 # 1
     min_FS_OWNPVIPCHI2: 1
     max_FS_OWNPVIPCHI2: 0
-    TwoBody_PT: 0
+    TwoBody_PT: 1
     TwoBody_MAXDOCA: 0
     TwoBody_OWNPVCORRM: 0
     TwoBody_OWNPVFDCHI2: 0

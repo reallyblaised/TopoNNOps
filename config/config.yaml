@@ -35,13 +35,13 @@ metrics:
 
 # Training parameters
 training:
-  training_data_scale_factor: 0.1
-  sb_ratio: ~
+  training_data_scale_factor: 1
+  sb_ratio: 1 # more physically correct (training and test have S>>B!) and yielding better training stability; evaluation on per-channel basis in terms of effs confirms this. In the limit of high stats, preferable
   num_epochs: 50
   batch_size: 128
   loss_fn: "bce_with_logits" # Options: bce_with_logits, focal, combined_focal_wbce, weighted_bce
   apply_preprocessing: True
-  balance_train_sample: False
+  balance_train_sample: False # Nominal: False; very hard to calibrate both in physics and in delivering sensible training results
 
 # Data paths
 paths:
