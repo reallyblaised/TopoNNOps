@@ -1,6 +1,6 @@
 # MLflow configuration
 mlflow:
-  experiment_name: "twobody_balanced_clip_norm_mon_nominal"
+  experiment_name: "twobody_loose_threads"
   tracking_uri: "http://localhost:5000"  # Update with your MLflow server
   tags:
     project: "TopoNBody Training [inclusive B]"
@@ -43,9 +43,15 @@ training:
   apply_preprocessing: True
   balance_train_sample: False # Nominal: False; very hard to calibrate both in physics and in delivering sensible training results
 
+scheduler:
+  name: "reduce_on_plateau"
+  mode: "min"  # minimize the loss
+  factor: 0.5  # Reduces learning rate by half when triggered
+  patience: 10  # Number of epochs with no improvement before reducing LR
+  min_lr: 1e-5  # Minimum learning rate
+
 # Data paths
 paths:
   train_data: "/ceph/submit/data/user/b/blaised/hlt2topo_sp_2025/scratch/TwoBody_2025_IMbalanced/train.pkl" # no preprocessing from data pipeline; handles by DataModule here()
   test_data: "/ceph/submit/data/user/b/blaised/hlt2topo_sp_2025/scratch/TwoBody_2025_IMbalanced/test.pkl" # idem
   model_save_dir: "./models"
-  
