@@ -192,6 +192,7 @@ class LHCbMCModule:
         feature_config_file: str = "features.yml",
         apply_preprocessing: bool = True,
         balance_train_sample: bool = False,
+        model: str = "TwoBody",
     ):
         """Setup the DataLoaders for training and testing data with preprocessing."""
         # Load and sample the data
@@ -213,7 +214,7 @@ class LHCbMCModule:
         self.test_channels = test_data["channel"].values
 
         # fetch the features
-        self.feature_cols = [feat for feat in self.feature_config().keys()]
+        self.feature_cols = [feat for feat in self.feature_config(model=model).keys()]
         assert len(self.feature_cols) > 0, "No features found in the config file"
 
         # Check if the feature columns are in the train_data keys
@@ -289,7 +290,7 @@ class LHCbMCModule:
             train_dataset, batch_size=batch_size, shuffle=True
         )
         self.test_loader = DataLoader(
-            test_dataset, batch_size=batch_size, shuffle=False
+            test_dataset, batch_size=batch_size, shuffle=True
         )  # NOTE: shuffling aids the inclusion of both classes in each batch - less important if I balance the dataset beforehand; can cause training instability in test loss
         self.input_dim = len(self.feature_cols)
 
@@ -303,6 +304,7 @@ class LHCbMCModule:
         feature_config_file: str = "features.yml",
         apply_preprocessing: bool = True,
         balance_train_sample: bool = False,
+        model: str = "TwoBody",
     ):
         """Setup the DataLoaders for distributed training across multiple GPUs with preprocessing"""
         # Load and sample the data
@@ -324,7 +326,7 @@ class LHCbMCModule:
         self.test_channels = test_data["channel"].values
 
         # fetch the features
-        self.feature_cols = [feat for feat in self.feature_config().keys()]
+        self.feature_cols = [feat for feat in self.feature_config(model=model).keys()]
         assert len(self.feature_cols) > 0, "No features found in the config file"
 
         # Check if the feature columns are in the train_data keys

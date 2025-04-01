@@ -44,7 +44,7 @@ def get_model(cfg: DictConfig, input_dim: int, feature_names: List[str]) -> nn.M
     elif architecture in ["lipschitz", "lipschitz_monotonic"]:
         # Get model configuration
         lip_const = cfg.model.get("lip_const", 1.0)
-        nbody = cfg.model.get("nbody", "TwoBody")
+        nbody = cfg.get("trigger", "TwoBody")
 
         # Determine if we use monotonicity constraints - can come from either:
         # 1. The architecture name (lipschitz_monotonic)
@@ -255,6 +255,7 @@ def train_process(rank, world_size, cfg):
             world_size=world_size,
             apply_preprocessing=cfg.training.get("apply_preprocessing", True),
             balance_train_sample=cfg.training.get("balance_train_sample", True),
+            model=cfg.get("trigger", "TwoBody"),  # Default to TwoBody if not specified
         )
 
         if is_master:
@@ -429,6 +430,9 @@ def single_gpu_training(cfg: DictConfig) -> None:
                 ratio=cfg.training.get("sb_ratio", 0.01),
                 apply_preprocessing=cfg.training.get("apply_preprocessing", True),
                 balance_train_sample=cfg.training.get("balance_train_sample", False),
+                model=cfg.get(
+                    "trigger", "TwoBody"
+                ),  # Default to TwoBody if not specified
             )
 
             logger.info(f"Input features: {data_module.feature_cols}")
