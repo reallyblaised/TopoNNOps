@@ -76,7 +76,6 @@ class ModelPerformance:
         metrics_chart = self._create_metric_evolution(history)
         feature_importance = self._create_feature_importance(X_test, y_test)
         confusion_matrix = self._create_confusion_matrix(y_test, y_test_pred)
-        # ROC and PR curves disabled
         roc_curve_chart = self._create_roc_curve(y_test, y_test_pred)
         pr_curve_chart = self._create_pr_curve(y_test, y_test_pred)
         response_distribution = self._create_response_distribution(y_test, y_test_pred)
@@ -91,7 +90,9 @@ class ModelPerformance:
                 color="independent"
             ),
             # ROC and PR curves removed from dashboard
-            # alt.hconcat(roc_curve_chart, pr_curve_chart).resolve_scale(color='independent'),
+            alt.hconcat(roc_curve_chart, pr_curve_chart).resolve_scale(
+                color="independent"
+            ),
             alt.hconcat(response_distribution).resolve_scale(color="independent"),
             correlation_matrices,  # Add correlation matrices to dashboard
         ]
