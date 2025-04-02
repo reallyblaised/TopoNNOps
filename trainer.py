@@ -112,9 +112,13 @@ class Trainer:
 
         for epoch in range(num_epochs):
             epoch_start_time = time.time()
-            
+
             # Set train loader's sampler epoch for proper shuffling in distributed mode
-            if self.is_distributed and hasattr(train_loader, 'sampler') and hasattr(train_loader.sampler, 'set_epoch'):
+            if (
+                self.is_distributed
+                and hasattr(train_loader, "sampler")
+                and hasattr(train_loader.sampler, "set_epoch")
+            ):
                 train_loader.sampler.set_epoch(epoch)
 
             # Training phase
@@ -133,25 +137,27 @@ class Trainer:
             for X, y in train_iter:
                 batch_loss, outputs = self._train_step(X, y)
                 train_losses.append(batch_loss)
-                
+
                 # Collect outputs and targets even in distributed mode for the master process
                 # This is used for visualizations later
                 if not self.is_distributed or self.is_master:
-                    all_train_outputs.extend(torch.sigmoid(outputs).detach().cpu().numpy())
+                    all_train_outputs.extend(
+                        torch.sigmoid(outputs).detach().cpu().numpy()
+                    )
                     all_train_targets.extend(y.cpu().numpy())
                     # Update progress bar if using one
-                    if hasattr(locals(), 'progress_bar'):
+                    if hasattr(locals(), "progress_bar"):
                         progress_bar.set_postfix({"loss": f"{batch_loss:.4f}"})
 
             # Calculate epoch metrics
             train_loss = np.mean(train_losses)
-            
+
             # Synchronize loss across processes in distributed mode
             if self.is_distributed:
                 train_loss_tensor = torch.tensor(train_loss).to(self.device)
                 dist.all_reduce(train_loss_tensor, op=dist.ReduceOp.SUM)
                 train_loss = (train_loss_tensor / dist.get_world_size()).item()
-            
+
             # Evaluate on validation set
             eval_metrics = self.evaluate(val_loader, metrics_cfg, epoch)
             epoch_time = time.time() - epoch_start_time
@@ -170,8 +176,12 @@ class Trainer:
                     eval_metrics=eval_metrics,
                     epoch=epoch,
                     epoch_time=epoch_time,
-                    train_outputs=np.array(all_train_outputs) if all_train_outputs else None,
-                    train_targets=np.array(all_train_targets) if all_train_targets else None,
+                    train_outputs=(
+                        np.array(all_train_outputs) if all_train_outputs else None
+                    ),
+                    train_targets=(
+                        np.array(all_train_targets) if all_train_targets else None
+                    ),
                 )
 
                 # Generate visualizations periodically
@@ -180,7 +190,9 @@ class Trainer:
 
             # Learning rate scheduling - must happen on all processes
             if self.scheduler:
-                if isinstance(self.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                if isinstance(
+                    self.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau
+                ):
                     self.scheduler.step(eval_metrics["loss"])
                 else:
                     self.scheduler.step()
@@ -194,7 +206,7 @@ class Trainer:
                     current_val_loss = val_loss_tensor.item()
                 else:
                     current_val_loss = eval_metrics["loss"]
-                
+
                 if current_val_loss < best_val_loss:
                     best_val_loss = current_val_loss
                     patience_counter = 0
@@ -248,21 +260,23 @@ class Trainer:
             if metrics_cfg.compute.get(metric_name, False):
                 metric_fn = globals()[f"{metric_name}_score"]
                 local_metrics[metric_name] = metric_fn(all_targets, binary_preds)
-                
+
         # For distributed training, synchronize metrics across processes
         if self.is_distributed:
             # Create a tensor to hold all metrics
             metrics_keys = list(local_metrics.keys())
-            metrics_tensor = torch.zeros(len(metrics_keys), dtype=torch.float32, device=self.device)
-            
+            metrics_tensor = torch.zeros(
+                len(metrics_keys), dtype=torch.float32, device=self.device
+            )
+
             # Fill the tensor with local metric values
             for i, key in enumerate(metrics_keys):
                 metrics_tensor[i] = local_metrics[key]
-            
+
             # All-reduce to get the average across all processes
             dist.all_reduce(metrics_tensor, op=dist.ReduceOp.SUM)
             metrics_tensor /= dist.get_world_size()
-            
+
             # Update metrics with synchronized values
             for i, key in enumerate(metrics_keys):
                 local_metrics[key] = metrics_tensor[i].item()
@@ -281,7 +295,7 @@ class Trainer:
         """Log comprehensive epoch information to MLflow (master process only)"""
         if self.is_distributed and not self.is_master:
             return
-            
+
         # Log basic metrics
         mlflow.log_metric("train_loss", train_loss, step=epoch)
         mlflow.log_metric("epoch_time", epoch_time, step=epoch)
@@ -307,36 +321,46 @@ class Trainer:
         """Generate and log visualizations using direct access to test dataset (master process only)"""
         if self.is_distributed and not self.is_master:
             return
-            
+
         # Skip if data module is not available
-        if not hasattr(self, 'data_module'):
+        if not hasattr(self, "data_module"):
             print("Data module not available for visualization")
             return
-        
+
         # Check if we have direct access to the test dataset tensors
-        if hasattr(self.data_module, 'X_test') and hasattr(self.data_module, 'y_test'):
+        if hasattr(self.data_module, "X_test") and hasattr(self.data_module, "y_test"):
             # Direct access to dataset tensors
             X_viz = self.data_module.X_test.to(self.device)
             y_viz = self.data_module.y_test
-            
+
             # Get channels if available
-            channels = self.data_module.test_channels if hasattr(self.data_module, 'test_channels') else None
-            
+            channels = (
+                self.data_module.test_channels
+                if hasattr(self.data_module, "test_channels")
+                else None
+            )
+
             try:
-                processor = self.data_module.preprocessor if hasattr(self.data_module, 'preprocessor') else None
+                processor = (
+                    self.data_module.preprocessor
+                    if hasattr(self.data_module, "preprocessor")
+                    else None
+                )
 
                 # Create performance dashboard
                 self.performance.create_performance_dashboard(
-                    X_viz.cpu().numpy(), y_viz.numpy(), 
-                    history, epoch,
+                    X_viz.cpu().numpy(),
+                    y_viz.numpy(),
+                    history,
+                    epoch,
                     channels=channels,
-                    preprocessor=processor, # pass to invert [0,1]-scaling in visualization
+                    preprocessor=processor,  # pass to invert [0,1]-scaling in visualization
                 )
-                
+
                 # Visualize weights if needed - uncomment this for weight visualizations
                 # self.weight_viz.create_weight_dashboard(X_viz, epoch)
-                
-                #print(f"Visualizations for epoch {epoch} created successfully")
+
+                # print(f"Visualizations for epoch {epoch} created successfully")
             except Exception as e:
                 print(f"Error creating visualizations: {str(e)}")
         else:
@@ -347,16 +371,16 @@ class Trainer:
         """Save model checkpoint (master process only)"""
         if self.is_distributed and not self.is_master:
             return
-            
+
         # For distributed training, we need to save the unwrapped model
         if self.is_distributed:
-            if hasattr(self.model, 'module'):
+            if hasattr(self.model, "module"):
                 model_state_dict = self.model.module.state_dict()
             else:
                 model_state_dict = self.model.state_dict()
         else:
             model_state_dict = self.model.state_dict()
-            
+
         checkpoint = {
             "epoch": epoch,
             "model_state_dict": model_state_dict,
@@ -367,4 +391,7 @@ class Trainer:
         if self.scheduler:
             checkpoint["scheduler_state_dict"] = self.scheduler.state_dict()
 
-        mlflow.log_dict(checkpoint, f"checkpoint_epoch_{epoch}.pth")
+        # Save as PyTorch file instead of JSON
+        checkpoint_path = f"checkpoint_epoch_{epoch}.pth"
+        torch.save(checkpoint, checkpoint_path)
+        mlflow.log_artifact(checkpoint_path)

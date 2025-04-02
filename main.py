@@ -198,8 +198,10 @@ def log_model_with_metadata(model, data_module, cfg):
             "loss_function": cfg.training.get("loss_fn", "bce_with_logits"),
         }
 
-        # Log model state dict instead of the full model
-        mlflow.log_dict(model.state_dict(), "model_state_dict.pth")
+        # Save model state dict as PyTorch file
+        model_path = "model_state_dict.pth"
+        torch.save(model.state_dict(), model_path)
+        mlflow.log_artifact(model_path)
 
         # Log metadata as a separate artifact
         mlflow.log_dict(metadata, "model_metadata.json")

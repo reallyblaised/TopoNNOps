@@ -59,7 +59,7 @@ class ModelEvaluator:
         logger.info(f"Using device: {self.device}")
 
         # Load configuration
-        self.config = self._load_config()
+        self.config = self.load_config(self.config_path)
 
         # Initialize data module
         self.data_module = self._initialize_data_module()
@@ -67,12 +67,13 @@ class ModelEvaluator:
         # Initialize model
         self.model = None
 
-    def _load_config(self) -> Dict:
+    @staticmethod
+    def load_config(path: Union[Path, str]) -> Dict:
         """Load configuration from YAML file."""
         try:
-            with open(self.config_path, "r") as file:
+            with open(path, "r") as file:
                 config = yaml.safe_load(file)
-            logger.info(f"Loaded configuration from {self.config_path}")
+            logger.info(f"Loaded configuration from {path}")
             return config
         except Exception as e:
             logger.error(f"Error loading configuration: {e}")
@@ -98,7 +99,6 @@ class ModelEvaluator:
             balance_train_sample=self.config["training"]["balance_train_sample"],
             model=trigger,
         )
-
         return data_module
 
     def _load_model(self) -> torch.nn.Module:
@@ -110,14 +110,13 @@ class ModelEvaluator:
         logger.info(f"Model input dimension: {input_dim}")
 
         # Determine model architecture from config
-        model_config = self.config.get("model", {})
-        architecture = model_config.get("architecture", "lipschitz_monotonic")
-        hidden_dims = model_config.get("hidden_dims", [128, 128, 128, 128, 128])
-
+        architecture = self.config["defaults"][0]["model"]
+        model_config_path = f"config/model/{architecture}.yaml"
+        model_config = self.load_config(model_config_path)
+        hidden_dims = model_config.get("layer_dims", [128, 128, 128, 128, 128])
+        breakpoint()
         # Create appropriate model based on architecture
         if "lipschitz" in architecture:
-            # Determine if monotonicity is required
-            monotonic = "monotonic" in architecture
 
             # Get feature names for monotonicity constraints
             feature_names = self.data_module.feature_cols
@@ -126,31 +125,28 @@ class ModelEvaluator:
             model = LipschitzNet(
                 input_dim=input_dim,
                 layer_dims=hidden_dims,
-                lip_const=2.0,  # Default value, should be in config ideally
-                monotonic=monotonic,
-                nbody=self.model_type,
+                lip_const=model_config.get("lip_const", 2.0),
+                monotonic=model_config.get("monotonic", True),
+                nbody=self.config.get("trigger", "TwoBody"),
                 feature_names=feature_names,
                 features_config_path=self.config.get(
                     "features_config_path", "config/features.yml"
                 ),
-                activation_fn="groupsort",
-                lip_kind="nominal",  # FIXME: make this configurable
+                lip_kind=model_config.get(
+                    "lip_kind", "nominal"
+                ),  # FIXME: make this configurable
             )
-            logger.info(f"Created LipschitzNet model with monotonicity={monotonic}")
+            logger.info(
+                f"Created LipschitzNet with identifier: {model_config.get('identified', '=== WARNING: MISSING IDENTIFIER ===')} model with monotonicity={model_config.get('monotonic', True)}"
+            )
             logger.info(f"{model.print_architecture_details()}")
         else:
             # Create an UnconstrainedNet model
             model = UnconstrainedNet(
                 input_dim=input_dim,
                 layer_dims=hidden_dims,
-                dropout_rate=0.0,
-                batch_norm=False,
-                activation_fn="relu",
-                l1_factor=0.0,
-                residual=False,
-                init_method="xavier_uniform",
             )
-            logger.info(f"Created UnconstrainedNet model")
+            logger.info(f"Created UnconstrainedNet model using default architecture")
         try:
             # Load state dict
             state_dict = torch.load(self.model_path, map_location=self.device)
@@ -180,7 +176,7 @@ class ModelEvaluator:
         # 1. Load the model if not already loaded
         if self.model is None:
             self.model = self._load_model()
-
+        breakpoint()
         # 2. Load the raw test data (unprocessed)
         logger.info("Loading raw test data...")
         test_data_path = self.config["paths"]["test_data"]
@@ -191,6 +187,7 @@ class ModelEvaluator:
         feature_cols = self.data_module.feature_cols
         X_test = self.data_module.X_test
 
+        breakpoint()
         # sanity check: the text-data length should be the same regarless of preprocessing
         assert len(test_df) == len(
             X_test
@@ -204,7 +201,7 @@ class ModelEvaluator:
 
             # Apply sigmoid if the model outputs logits
             predictions = torch.sigmoid(predictions)
-
+            breakpoint()
             # Move back to CPU and convert to numpy
             predictions_np = predictions.cpu().numpy().flatten()
 
@@ -241,11 +238,9 @@ def main():
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
     # Initialize evaluator and run inference
-    evaluator = ModelEvaluator(
-        config_path=config_path, model_path=model_path, model_type="ThreeBody"
-    )
-
+    evaluator = ModelEvaluator(config_path=config_path)
     result_df = evaluator.run_inference(output_path=output_path)
+    breakpoint()
 
     # # Print results statistics
     # logger.info(f"Results summary:")
