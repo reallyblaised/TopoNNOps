@@ -13,6 +13,7 @@ from models import UnconstrainedNet, LipschitzNet, LipschitzLegacyNet
 from trainer import Trainer
 from data import LHCbMCModule
 from loss import FocalLoss, CombinedFocalBCELoss, WeightedBCELoss
+import yaml
 
 
 def setup(rank, world_size):
@@ -166,6 +167,12 @@ def get_criterion(cfg: DictConfig) -> nn.Module:
 def log_model_with_metadata(model, data_module, cfg):
     """Log the model state dict to MLflow with detailed feature and class information"""
     try:
+        # If using DDP, unwrap the model first
+        if hasattr(model, "module"):
+            model_to_save = model.module
+        else:
+            model_to_save = model
+
         # Extract feature names and constraints from data module
         feature_names = data_module.feature_cols
 
@@ -198,9 +205,9 @@ def log_model_with_metadata(model, data_module, cfg):
             "loss_function": cfg.training.get("loss_fn", "bce_with_logits"),
         }
 
-        # Save model state dict as PyTorch file
-        model_path = "model_state_dict.pth"
-        torch.save(model.state_dict(), model_path)
+        # Save model state dict as PyTorch file - CORRECTED LINE
+        model_path = "model_state_dict.pt"
+        torch.save(model_to_save.state_dict(), model_path)
         mlflow.log_artifact(model_path)
 
         # Log metadata as a separate artifact

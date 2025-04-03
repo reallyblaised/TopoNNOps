@@ -185,7 +185,7 @@ class Trainer:
                 )
 
                 # Generate visualizations periodically
-                if epoch % 5 == 0 or epoch == num_epochs - 1:
+                if epoch % 20 == 0 or epoch == num_epochs - 1:
                     self._generate_visualizations(history, epoch)
 
             # Learning rate scheduling - must happen on all processes

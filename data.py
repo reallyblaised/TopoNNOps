@@ -294,6 +294,134 @@ class LHCbMCModule:
         )  # NOTE: shuffling aids the inclusion of both classes in each batch - less important if I balance the dataset beforehand; can cause training instability in test loss
         self.input_dim = len(self.feature_cols)
 
+    def setup_for_viz(
+        self,
+        batch_size: int = 128,
+        scale_factor: float = 1.0,
+        ratio: Union[float, None] = None,
+        feature_config_file: str = "features.yml",
+        apply_preprocessing: bool = True,
+        balance_train_sample: bool = False,
+        model: str = "TwoBody",
+    ):
+        """Ad-hoc loader and preprocessor to generate MC-only performance plots."""
+        # Load and sample the data
+        train_data = self._process_sb_data(
+            pd.read_pickle(self.train_path),
+            scale_factor=scale_factor,
+            ratio=ratio,
+        )
+
+        # Load the test data with the same sampling
+        test_data = self._process_sb_data(
+            pd.read_pickle(self.test_path),
+            scale_factor=scale_factor,
+            ratio=ratio,
+        )
+
+        # Store the channel information
+        self.train_channels = train_data["channel"].values
+        self.test_channels = test_data["channel"].values
+
+        # fetch the features
+        self.feature_cols = [feat for feat in self.feature_config(model=model).keys()]
+        assert len(self.feature_cols) > 0, "No features found in the config file"
+
+        # Check if the feature columns are in the train_data keys
+        assert all(
+            feat in train_data.columns for feat in self.feature_cols
+        ), f"Missing features in training data: {[feat for feat in self.feature_cols if feat not in train_data.columns]}"
+
+        # HACK: store the full datasets (not just the loaders) - to enable access to channel info for efficiency histograms
+        self.raw_train_data = train_data.copy()
+        self.raw_test_data = test_data.copy()
+
+        # Apply preprocessing if requested
+        if apply_preprocessing:
+            # Initialize the preprocessor with transformation configs
+            self._initialize_preprocessor(feature_config_file=feature_config_file)
+
+            # Apply preprocessing to train and test data
+            # Only preprocess the feature columns
+            subset_train = train_data[self.feature_cols + ["class_label", "channel"]]
+
+            # add extra info for efficiency histograms (on test data only)
+            subset_test = test_data[
+                self.feature_cols
+                + [
+                    "class_label",
+                    "channel",
+                    "TwoBody_OWNPVLTIME",
+                    "TwoBody_MC_LIFETIME",
+                ]
+            ]  # add lifetime in testing for efficiency histograms
+            subset_test["TwoBody_PT_unscaled"] = test_data[
+                "TwoBody_PT"
+            ]  # add original PT for efficiency histograms - no scaling/preprocessing applied
+
+            # Fit and transform on training data
+            processed_train = self._preprocessor.fit_transform(
+                subset_train, balance=balance_train_sample
+            )
+
+            # Transform test data using the same fitted preprocessor
+            processed_test = self._preprocessor.transform(
+                subset_test
+            )  # NOTE: transformed with eff observables
+
+            # Extract the processed feature columns AND target
+            X_train = torch.tensor(
+                processed_train[self.feature_cols].values, dtype=torch.float32
+            )
+            y_train = torch.tensor(
+                processed_train["class_label"].values, dtype=torch.float32
+            )
+
+            X_test = torch.tensor(
+                processed_test[self.feature_cols].values, dtype=torch.float32
+            )
+            y_test = torch.tensor(
+                processed_test["class_label"].values, dtype=torch.float32
+            )
+        else:
+            # Use raw unprocessed data
+            X_train = torch.tensor(
+                train_data[self.feature_cols].values, dtype=torch.float32
+            )
+            y_train = torch.tensor(
+                train_data["class_label"].values, dtype=torch.float32
+            )
+
+            X_test = torch.tensor(
+                test_data[self.feature_cols].values, dtype=torch.float32
+            )
+            y_test = torch.tensor(test_data["class_label"].values, dtype=torch.float32)
+
+        # HACK - print the population to get a feel for the signal abundance relative to bkg
+        print(f"Ad-hoc debug: {processed_train.channel.value_counts()}")
+
+        # Store the tensors for direct access
+        self.X_train = X_train
+        self.y_train = y_train
+        self.X_test = X_test
+        self.y_test = y_test
+
+        # HACK: expose the processed data for efficiency histograms
+        self.processed_test_data_w_obs = processed_test
+
+        # put together the dataset
+        train_dataset = TensorDataset(X_train, y_train)
+        test_dataset = TensorDataset(X_test, y_test)
+
+        # create the dataloaders
+        self.train_loader = DataLoader(
+            train_dataset, batch_size=batch_size, shuffle=True
+        )
+        self.test_loader = DataLoader(
+            test_dataset, batch_size=batch_size, shuffle=True
+        )  # NOTE: shuffling aids the inclusion of both classes in each batch - less important if I balance the dataset beforehand; can cause training instability in test loss
+        self.input_dim = len(self.feature_cols)
+
     def setup_distributed(
         self,
         batch_size: int = 128,

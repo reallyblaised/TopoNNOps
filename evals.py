@@ -29,7 +29,7 @@ class ModelEvaluator:
     def __init__(
         self,
         config_path: str = "/work/submit/blaised/TopoNNOps/config/config.yaml",
-        model_path: str = "/work/submit/blaised/TopoNNOps/mlruns/6/f371fdd7316d472ab435812958f851c7/artifacts/model_state_dict.pth",
+        model_path: str = "/ceph/submit/data/user/b/blaised/hlt2topo_sp_2025/evals/twobody_nominal_model_state_dict.pt",
         feature_config_file: str = "features.yml",
         model_type: str = "ThreeBody",
         device: str = None,
@@ -90,10 +90,10 @@ class ModelEvaluator:
 
         # Setup the data module to initialize preprocessing
         trigger = self.config.get("trigger", "TwoBody")
-        data_module.setup(
+        data_module.setup_for_viz(
             batch_size=self.config["training"]["batch_size"],
-            scale_factor=self.config["training"]["training_data_scale_factor"],
-            ratio=self.config["training"]["sb_ratio"],
+            scale_factor=1.0,  # self.config["training"]["training_data_scale_factor"],
+            ratio=None,  # self.config["training"]["sb_ratio"],
             feature_config_file=self.feature_config_file,
             apply_preprocessing=self.config["training"]["apply_preprocessing"],
             balance_train_sample=self.config["training"]["balance_train_sample"],
@@ -114,7 +114,7 @@ class ModelEvaluator:
         model_config_path = f"config/model/{architecture}.yaml"
         model_config = self.load_config(model_config_path)
         hidden_dims = model_config.get("layer_dims", [128, 128, 128, 128, 128])
-        breakpoint()
+
         # Create appropriate model based on architecture
         if "lipschitz" in architecture:
 
@@ -176,22 +176,13 @@ class ModelEvaluator:
         # 1. Load the model if not already loaded
         if self.model is None:
             self.model = self._load_model()
-        breakpoint()
-        # 2. Load the raw test data (unprocessed)
-        logger.info("Loading raw test data...")
-        test_data_path = self.config["paths"]["test_data"]
-        test_df = pd.read_pickle(test_data_path)
-        logger.info(f"Loaded test data with {len(test_df)} rows")
 
-        # 3. Get preprocessed test features from data module
+        # 2+3. Load test data (in DM() constructor) + get preprocessed test features from data module
         feature_cols = self.data_module.feature_cols
-        X_test = self.data_module.X_test
-
-        breakpoint()
-        # sanity check: the text-data length should be the same regarless of preprocessing
-        assert len(test_df) == len(
-            X_test
-        ), "Length of test data and preprocessed data should be the same"
+        X_test = self.data_module.X_test  # for inference on GPU with torch
+        test_df_w_observables = (
+            self.data_module.processed_test_data_w_obs
+        )  # same as above, but df with observables of interest for eff hists
 
         # 4. Run inference using the model
         logger.info("Running inference...")
@@ -201,7 +192,7 @@ class ModelEvaluator:
 
             # Apply sigmoid if the model outputs logits
             predictions = torch.sigmoid(predictions)
-            breakpoint()
+
             # Move back to CPU and convert to numpy
             predictions_np = predictions.cpu().numpy().flatten()
 
@@ -209,38 +200,37 @@ class ModelEvaluator:
 
         # 5. Add predictions to the original dataframe
         # Make sure the dataframe has the same number of rows as predictions
-        if len(test_df) != len(predictions_np):
+        if len(test_df_w_observables) != len(predictions_np):
             logger.warning(
                 f"Number of predictions ({len(predictions_np)}) does not match dataframe size ({len(test_df)})"
             )
 
         # Add predictions column
-        test_df["nn_prediction"] = predictions_np
+        test_df_w_observables["nn_prediction"] = predictions_np
         logger.info("Added predictions to the dataframe")
 
         # 6. Optionally save the result
         if output_path:
-            test_df.to_pickle(output_path)
+            test_df_w_observables.to_pickle(output_path)
             logger.info(f"Saved dataframe with predictions to {output_path}")
 
-        return test_df
+        return test_df_w_observables
 
 
 def main():
     """Run inference and save results."""
     # Define paths
     config_path = "/work/submit/blaised/TopoNNOps/config/config.yaml"
-    model_path = "/work/submit/blaised/TopoNNOps/mlruns/6/f371fdd7316d472ab435812958f851c7/artifacts/model_state_dict.pth"
-    output_path = None
+    model_path = "/work/submit/blaised/TopoNNOps/mlruns/1/ee33ec5fabde4f41839b6eb09d4ae8b8/artifacts/model_state_dict.pt"
+    output_path = "/ceph/submit/data/user/b/blaised/hlt2topo_sp_2025/evals/twobody_fullstats_unconstrained.pkl"  # Path to save the output dataframe
 
     # Create output directory if it doesn't exist
     if output_path:
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
     # Initialize evaluator and run inference
-    evaluator = ModelEvaluator(config_path=config_path)
+    evaluator = ModelEvaluator(config_path=config_path, model_path=model_path)
     result_df = evaluator.run_inference(output_path=output_path)
-    breakpoint()
 
     # # Print results statistics
     # logger.info(f"Results summary:")
