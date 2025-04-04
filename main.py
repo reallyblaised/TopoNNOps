@@ -82,6 +82,7 @@ def get_model(cfg: DictConfig, input_dim: int, feature_names: List[str]) -> nn.M
         return LipschitzLegacyNet(
             input_dim=input_dim,
             feature_names=feature_names,
+            layer_dims=cfg.model.layer_dims,
             lip_const=lip_const,
             monotonic=monotonic,
             nbody=nbody,

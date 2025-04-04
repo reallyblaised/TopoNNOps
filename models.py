@@ -464,6 +464,7 @@ class LipschitzLegacyNet(nn.Module):
         self,
         input_dim: int,
         feature_names: List[str],
+        layer_dims: List[int] = None,
         lip_const: float = 1.0,
         monotonic: bool = False,
         nbody: str = "TwoBody",
@@ -475,6 +476,7 @@ class LipschitzLegacyNet(nn.Module):
         super().__init__()
         self.input_dim = input_dim
         self.feature_names = feature_names
+        self.layer_dims = layer_dims
         self.lip_const = lip_const
         self.monotonic = monotonic
         self.nbody = nbody
@@ -503,16 +505,20 @@ class LipschitzLegacyNet(nn.Module):
                     max_norm=float(self.lip_const) ** (1 / 4),
                 )
 
-        # Build model exactly as in the original code
-        model = nn.Sequential(
-            lipschitz_norm(nn.Linear(len(self.feature_names), 32)),
-            groupsort_legacy(32 // 2),
-            lipschitz_norm(nn.Linear(32, 64)),
-            groupsort_legacy(64 // 2),
-            lipschitz_norm(nn.Linear(64, 32)),
-            groupsort_legacy(32 // 2),
-            lipschitz_norm(nn.Linear(32, 1)),
-        )
+        # Use the layer_dims to build a dynamic model instead of hardcoded dimensions
+        layers = []
+        prev_dim = len(self.feature_names)
+
+        for dim in self.layer_dims:
+            layers.append(lipschitz_norm(nn.Linear(prev_dim, dim)))
+            layers.append(groupsort_legacy(dim // 2))
+            prev_dim = dim
+
+        # Add output layer
+        layers.append(lipschitz_norm(nn.Linear(prev_dim, 1)))
+
+        # Create the sequential model
+        model = nn.Sequential(*layers)
 
         # Apply SigmaNet wrapper if using monotonicity
         if robust:
@@ -589,7 +595,6 @@ class LipschitzLegacyNet(nn.Module):
         """Print detailed information about the legacy model architecture."""
         print("\n===== LipschitzLegacyNet Architecture Details =====")
         print(f"Input dimension: {self.input_dim}")
-        print(f"Legacy fixed architecture: 32-64-32 neurons")
         print(f"Lipschitz constant: {self.lip_const}")
         print(f"Monotonicity enabled: {self.monotonic}")
         print(f"NBodies setting: {self.nbody}")

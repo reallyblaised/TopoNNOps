@@ -11,7 +11,7 @@ from preprocessing import DataPreprocessor
 from data import LHCbMCModule
 
 # Import model classes from models.py
-from models import LipschitzNet, UnconstrainedNet
+from models import LipschitzNet, UnconstrainedNet, LipschitzLegacyNet
 
 # Set up logging
 logging.basicConfig(
@@ -121,23 +121,38 @@ class ModelEvaluator:
             # Get feature names for monotonicity constraints
             feature_names = self.data_module.feature_cols
 
-            # Create a LipschitzNet model
-            model = LipschitzNet(
-                input_dim=input_dim,
-                layer_dims=hidden_dims,
-                lip_const=model_config.get("lip_const", 2.0),
-                monotonic=model_config.get("monotonic", True),
-                nbody=self.config.get("trigger", "TwoBody"),
-                feature_names=feature_names,
-                features_config_path=self.config.get(
-                    "features_config_path", "config/features.yml"
-                ),
-                lip_kind=model_config.get(
-                    "lip_kind", "nominal"
-                ),  # FIXME: make this configurable
-            )
+            if "legacy" in architecture:
+                # Create a LipschitzNet model
+                model = LipschitzLegacyNet(
+                    input_dim=input_dim,
+                    layer_dims=hidden_dims,
+                    lip_const=model_config.get("lip_const", 2.0),
+                    monotonic=model_config.get("monotonic", True),
+                    nbody=self.config.get("trigger", "TwoBody"),
+                    feature_names=feature_names,
+                    features_config_path=self.config.get(
+                        "features_config_path", "config/features.yml"
+                    ),
+                )
+            else:
+                # Create a LipschitzNet model
+                model = LipschitzNet(
+                    input_dim=input_dim,
+                    layer_dims=hidden_dims,
+                    lip_const=model_config.get("lip_const", 2.0),
+                    monotonic=model_config.get("monotonic", True),
+                    nbody=self.config.get("trigger", "TwoBody"),
+                    feature_names=feature_names,
+                    features_config_path=self.config.get(
+                        "features_config_path", "config/features.yml"
+                    ),
+                    lip_kind=model_config.get(
+                        "lip_kind", "nominal"
+                    ),  # FIXME: make this configurable
+                )
+
             logger.info(
-                f"Created LipschitzNet with identifier: {model_config.get('identified', '=== WARNING: MISSING IDENTIFIER ===')} model with monotonicity={model_config.get('monotonic', True)}"
+                f"Created LipschitzNet with identifier: {model_config.get('identifier', '=== WARNING: MISSING IDENTIFIER ===')} model with monotonicity={model_config.get('monotonic', True)}"
             )
             logger.info(f"{model.print_architecture_details()}")
         else:
@@ -221,8 +236,8 @@ def main():
     """Run inference and save results."""
     # Define paths
     config_path = "/work/submit/blaised/TopoNNOps/config/config.yaml"
-    model_path = "/work/submit/blaised/TopoNNOps/mlruns/1/ee33ec5fabde4f41839b6eb09d4ae8b8/artifacts/model_state_dict.pt"
-    output_path = "/ceph/submit/data/user/b/blaised/hlt2topo_sp_2025/evals/twobody_fullstats_unconstrained.pkl"  # Path to save the output dataframe
+    model_path = "/work/submit/blaised/TopoNNOps/mlruns/2/4ae13eb77694499d9a274d4394cbcdc3/artifacts/model_state_dict.pt"
+    output_path = "/ceph/submit/data/user/b/blaised/hlt2topo_sp_2025/evals/twobody_legacy_fullstats.pkl"  # Path to save the output dataframe
 
     # Create output directory if it doesn't exist
     if output_path:
