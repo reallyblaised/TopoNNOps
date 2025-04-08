@@ -1,0 +1,68 @@
+# feature list : monotonic constraint
+features:
+  TwoBody:
+    min_PT_final_state_tracks: 1
+    sum_PT_final_state_tracks: 0
+    min_FS_IPCHI2_OWNPV: 1
+    max_FS_IPCHI2_OWNPV: 0
+    TwoBody_PT: 0
+    TwoBody_DOCAMAX: 0
+    TwoBody_MCORR: 0
+    TwoBody_FDCHI2_OWNPV: 0
+    TwoBody_ENDVERTEX_CHI2DOF: 0
+
+  ThreeBody:
+    min_FS_IPCHI2_OWNPV: 1
+    max_FS_IPCHI2_OWNPV: 0
+    sum_PT_TRACK12: 0
+    min_PT_TRACK12: 1
+    sum_PT_final_state_tracks: 0
+    min_PT_final_state_tracks: 1
+    TwoBody_DOCAMAX: 0
+    ThreeBody_DOCAMAX: 0
+    TwoBody_FDCHI2_OWNPV: 0
+    TwoBody_IPCHI2_OWNPV: 0
+    ThreeBody_FDCHI2_OWNPV: 0
+    ThreeBody_PT: 0
+    TwoBody_PT: 0
+    TwoBody_ENDVERTEX_CHI2DOF: 0
+    ThreeBody_ENDVERTEX_CHI2DOF: 0
+    ThreeBody_MCORR: 0
+    TwoBody_MCORR: 0
+
+transforms: # preprocessing: transfrom -> quantile-based clipping -> normalisation
+  TwoBody:
+    # gev-scaled variables; kinematics
+    min_PT_final_state_tracks: "gev"
+    sum_PT_final_state_tracks: "gev"
+    TwoBody_PT: "gev"
+    TwoBody_MCORR: "gev"
+    # fit-quality vars
+    min_FS_IPCHI2_OWNPV: "log"
+    max_FS_IPCHI2_OWNPV: "log"
+    TwoBody_FDCHI2_OWNPV: "log"
+    TwoBody_ENDVERTEX_CHI2DOF: "log"
+    # doca-like; unscaled
+    TwoBody_MAXDOCA: ~
+
+  ThreeBody:
+    # gev-scaled variables; kinematics
+    min_PT_final_state_tracks: "gev"
+    sum_PT_final_state_tracks: "gev"
+    sum_PT_TRACK12: "gev"
+    min_PT_TRACK12: "gev"
+    TwoBody_PT: "gev"
+    ThreeBody_PT: "gev"
+    TwoBody_OWNPVCORRM: "gev"
+    ThreeBody_OWNPVCORRM: "gev"
+    # fit-quality vars
+    min_FS_OWNPVIPCHI2: "log"
+    max_FS_OWNPVIPCHI2: "log"
+    TwoBody_OWNPVFDCHI2: "log"
+    ThreeBody_OWNPVFDCHI2: "log"
+    TwoBody_OWNPVIPCHI2: "log"
+    TwoBody_ENDVERTEX_CHI2DOF: "log"
+    ThreeBody_ENDVERTEX_CHI2DOF: "log"
+    # doca-like; unscaled
+    TwoBody_MAXDOCA: ~
+    ThreeBody_MAXDOCA: ~

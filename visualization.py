@@ -707,6 +707,58 @@ class ModelPerformance:
 
         return chart
 
+    def _create_feature_correlation_matrices(
+        self, X: np.ndarray, y: np.ndarray
+    ) -> alt.Chart:
+        """Create correlation matrices for signal and background"""
+        # Create separate dataframes for signal and background
+        signal_df = pd.DataFrame(X[y.ravel() == 1], columns=self.feature_names)
+        background_df = pd.DataFrame(X[y.ravel() == 0], columns=self.feature_names)
+
+        # Calculate correlation matrices
+        signal_corr = signal_df.corr()
+        background_corr = background_df.corr()
+
+        # Create heatmaps
+        signal_heatmap = (
+            alt.Chart(signal_corr.reset_index())
+            .mark_rect()
+            .encode(
+                x=alt.X("index:N", title="Feature"),
+                y=alt.Y("columns:N", title="Feature"),
+                color=alt.Color(
+                    "value:Q",
+                    scale=alt.Scale(scheme="redblue", domainMid=0),
+                    title="Correlation",
+                ),
+                tooltip=["index:N", "columns:N", "value:Q"],
+            )
+            .properties(width=400, height=300, title="Signal Correlation Matrix")
+            .interactive()
+        )
+
+        background_heatmap = (
+            alt.Chart(background_corr.reset_index())
+            .mark_rect()
+            .encode(
+                x=alt.X("index:N", title="Feature"),
+                y=alt.Y("columns:N", title="Feature"),
+                color=alt.Color(
+                    "value:Q",
+                    scale=alt.Scale(scheme="redblue", domainMid=0),
+                    title="Correlation",
+                ),
+                tooltip=["index:N", "columns:N", "value:Q"],
+            )
+            .properties(width=400, height=300, title="Background Correlation Matrix")
+            .interactive()
+        )
+
+        # Combine heatmaps
+        correlation_matrices = alt.hconcat(signal_heatmap, background_heatmap)
+
+        return correlation_matrices
+
     def _create_channel_efficiency_vs_pt(
         self,
         X: np.ndarray,

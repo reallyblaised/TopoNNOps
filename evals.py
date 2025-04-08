@@ -31,7 +31,7 @@ class ModelEvaluator:
         config_path: str = "/work/submit/blaised/TopoNNOps/config/config.yaml",
         model_path: str = "/ceph/submit/data/user/b/blaised/hlt2topo_sp_2025/evals/twobody_nominal_model_state_dict.pt",
         feature_config_file: str = "features.yml",
-        model_type: str = "ThreeBody",
+        model_type: str = "TwoBody",
         device: str = None,
     ):
         """
@@ -236,8 +236,8 @@ def main():
     """Run inference and save results."""
     # Define paths
     config_path = "/work/submit/blaised/TopoNNOps/config/config.yaml"
-    model_path = "/work/submit/blaised/TopoNNOps/mlruns/2/4ae13eb77694499d9a274d4394cbcdc3/artifacts/model_state_dict.pt"
-    output_path = "/ceph/submit/data/user/b/blaised/hlt2topo_sp_2025/evals/twobody_legacy_fullstats.pkl"  # Path to save the output dataframe
+    model_path = "/work/submit/blaised/TopoNNOps/mlruns/2/0be35a3198394ff68cee50c19cfc3f38/artifacts/model_state_dict.pt"
+    output_path = "/ceph/submit/data/user/b/blaised/hlt2topo_sp_2025/evals/twobody_nominal_imbalanced.pkl"  # Path to save the output dataframe
 
     # Create output directory if it doesn't exist
     if output_path:

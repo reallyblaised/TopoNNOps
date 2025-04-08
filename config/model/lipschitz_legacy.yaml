@@ -1,12 +1,17 @@
 identifier: "lipschitz_legacy"  
 
+# hidden layer dimensions
+layer_dims: [128, 128, 128, 128, 128, 128, 128]
+
 # Lipschitz-specific parameters
 activation_fn: "groupsort"
 lip_const: 2.0
 nbody: "TwoBody"
 monotonic: True  # Flag to enforce monotonicity constraints
 
-# Regular parameters (these won't affect the architecture but are needed for config)
+# Regular parameters
 dropout_rate: 0.0
 batch_norm: false
 l1_factor: 0.0
+residual: false
+init_method: "xavier_uniform"

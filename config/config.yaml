@@ -1,6 +1,6 @@
 # MLflow configuration
 mlflow:
-  experiment_name: "twobody_loose_threads"
+  experiment_name: "performance_plots_mc_100epochs"
   tracking_uri: "http://localhost:5000"  # Update with your MLflow server
   tags:
     project: "TopoNBody Training [inclusive B]"
@@ -35,9 +35,9 @@ metrics:
 
 # Training parameters
 training:
-  training_data_scale_factor: 1 # default: 1; full minimum bias
-  sb_ratio: 1 # more physically correct (training and test have S>>B!) and yielding better training stability; evaluation on per-channel basis in terms of effs confirms this. In the limit of high stats, preferable
-  num_epochs: 150
+  training_data_scale_factor: 1.0 # default: 1; full minimum bias
+  sb_ratio: 25 # default: 1 - more physically correct (training and test have S>>B!) and yielding better training stability; evaluation on per-channel basis in terms of effs confirms this. In the limit of high stats, preferable
+  num_epochs: 25
   batch_size: 128
   loss_fn: "bce_with_logits" # Options: bce_with_logits, focal, combined_focal_wbce, weighted_bce
   apply_preprocessing: True
@@ -48,10 +48,11 @@ scheduler:
   mode: "min"  # minimize the loss
   factor: 0.5  # Reduces learning rate by half when triggered
   patience: 10  # Number of epochs with no improvement before reducing LR
-  min_lr: 1e-5  # Minimum learning rate
+  min_lr: 1e-8  # Minimum learning rate
 
 # Data paths
 paths:
+  # 2025 tuning samples
   train_data: "/ceph/submit/data/user/b/blaised/hlt2topo_sp_2025/scratch/TwoBody_2025_IMbalanced/train.pkl" # no preprocessing from data pipeline; handles by DataModule here()
-  test_data: "/ceph/submit/data/user/b/blaised/hlt2topo_sp_2025/scratch/TwoBody_2025_IMbalanced/test.pkl" # idem
+  test_data: "/ceph/submit/data/user/b/blaised/hlt2topo_sp_2025/scratch/TwoBody_2025_IMbalanced/test.pkl" # idem=
   model_save_dir: "./models"

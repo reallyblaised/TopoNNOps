@@ -125,6 +125,9 @@ class LHCbMCModule:
                 # Any feature without an explicit transform goes to unchanged_vars
                 unchanged_vars.append(feature)
 
+        # sanity check: all features preserved + no erroenous inclusion of observables as features (which we woudl need for efficiency plots)
+        assert len(gev_vars) + len(log_vars) + len(unchanged_vars) == len(feature_list), "Number of features in the preprocessor does not match the number of features in the config file"
+
         # Create preprocessor with proper configs
         self._preprocessor = DataPreprocessor(
             gev_vars=tuple(gev_vars),
@@ -234,13 +237,12 @@ class LHCbMCModule:
             # Apply preprocessing to train and test data
             # Only preprocess the feature columns
             subset_train = train_data[self.feature_cols + ["class_label", "channel"]]
-            subset_test = test_data[self.feature_cols + ["class_label", "channel"]]
+            subset_test = test_data[self.feature_cols + ["class_label", "channel"]] # add lifetime for efficiency plots - not as a feature
 
             # Fit and transform on training data
             processed_train = self._preprocessor.fit_transform(
                 subset_train, balance=balance_train_sample
             )
-
             # Transform test data using the same fitted preprocessor
             processed_test = self._preprocessor.transform(subset_test)
 
