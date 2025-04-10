@@ -12,6 +12,7 @@ from data import LHCbMCModule
 
 # Import model classes from models.py
 from models import LipschitzNet, UnconstrainedNet, LipschitzLegacyNet
+from model_persistence import load_from_pt
 
 # Set up logging
 logging.basicConfig(
@@ -93,7 +94,7 @@ class ModelEvaluator:
         data_module.setup_for_viz(
             batch_size=self.config["training"]["batch_size"],
             scale_factor=1.0,  # self.config["training"]["training_data_scale_factor"],
-            ratio=None,  # self.config["training"]["sb_ratio"],
+            ratio=1.0,  # self.config["training"]["sb_ratio"],
             feature_config_file=self.feature_config_file,
             apply_preprocessing=self.config["training"]["apply_preprocessing"],
             balance_train_sample=self.config["training"]["balance_train_sample"],
@@ -164,8 +165,7 @@ class ModelEvaluator:
             logger.info(f"Created UnconstrainedNet model using default architecture")
         try:
             # Load state dict
-            state_dict = torch.load(self.model_path, map_location=self.device)
-            model.load_state_dict(state_dict)
+            model = load_from_pt(self.model_path) # ensured nominal prescription
             logger.info("Model loaded successfully")
         except Exception as e:
             logger.error(f"Error loading model state dict: {e}")
@@ -236,8 +236,8 @@ def main():
     """Run inference and save results."""
     # Define paths
     config_path = "/work/submit/blaised/TopoNNOps/config/config.yaml"
-    model_path = "/work/submit/blaised/TopoNNOps/mlruns/2/0be35a3198394ff68cee50c19cfc3f38/artifacts/model_state_dict.pt"
-    output_path = "/ceph/submit/data/user/b/blaised/hlt2topo_sp_2025/evals/twobody_nominal_imbalanced.pkl"  # Path to save the output dataframe
+    model_path = "/work/submit/blaised/TopoNNOps/mlruns/1/f4afd7152fa3499097e0a8b437ae2123/artifacts/model_state_dict.pt"
+    output_path = "/ceph/submit/data/user/b/blaised/hlt2topo_sp_2025/evals/twobody_nominal.pkl"  # Path to save the output dataframe
 
     # Create output directory if it doesn't exist
     if output_path:

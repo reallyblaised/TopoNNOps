@@ -502,7 +502,7 @@ class LipschitzLegacyNet(nn.Module):
                     module,
                     always_norm=is_norm,
                     kind=_kind,
-                    max_norm=float(self.lip_const) ** (1 / 4),
+                    max_norm=float(self.lip_const) ** (1 / depth),
                 )
 
         # Use the layer_dims to build a dynamic model instead of hardcoded dimensions
