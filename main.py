@@ -513,10 +513,8 @@ def single_gpu_training(cfg: DictConfig) -> None:
             mlflow.log_param(
                 "constraint.1", "Monotonically increasing (at the partials)"
             )
-
             # Log model with detailed metadata
             log_model_with_metadata(model, data_module, cfg)
-
             logger.info("Training completed successfully!")
 
         except Exception as e:

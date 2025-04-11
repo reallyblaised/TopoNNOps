@@ -5,8 +5,9 @@ from models import LipschitzNet
 from data import LHCbMCModule
 from typing import Dict, Optional, List
 
-NBODY_MODEL = "TwoBody"
+NBODY_MODEL = "ThreeBody"
 NN_SCHEMA = "nominal"
+
 
 def load_from_pt(filename, apply_normalization=True, hidden_layer_dims=[128, 128, 128, 128, 128, 128, 128]):
     """
@@ -38,13 +39,13 @@ def load_from_pt(filename, apply_normalization=True, hidden_layer_dims=[128, 128
     model = LipschitzNet(
         input_dim=input_dim, 
         layer_dims=hidden_layer_dims, 
-        lip_const=lipschitz_const,
+        lip_const=lipschitz_const.item(),
         monotonic=True if any(monotonic_constraints) else False,
         nbody=NBODY_MODEL,
-        feature_names=list(LHCbMCModule.feature_config(model='TwoBody').keys()),
+        feature_names=list(LHCbMCModule.feature_config(model=NBODY_MODEL).keys()),
         lip_kind=NN_SCHEMA
-    )._build_model()
-    
+    )
+
     # If normalization is requested, apply Lipschitz normalization to weights
     if apply_normalization:
         # Find all weight keys in the state dict that need normalization
@@ -82,7 +83,7 @@ def load_from_pt(filename, apply_normalization=True, hidden_layer_dims=[128, 128
 
     # Load the weights into the model
     try:
-        model.load_state_dict(state_dict, strict=False)
+        model.load_state_dict(state_dict, strict=True)
         print("Successfully loaded weights into model")
     except Exception as e:
         print(f"Warning: Error during weight loading: {e}")
@@ -335,12 +336,12 @@ if __name__ == "__main__":
 
     # # Production model loading and export - uncomment to test
     print("\nLoading production model:")
-    prod_model = load_from_pt("/work/submit/blaised/TopoNNOps/mlruns/1/f4afd7152fa3499097e0a8b437ae2123/artifacts/model_state_dict.pt")
+    prod_model = load_from_pt("/work/submit/blaised/TopoNNOps/mlruns/3/4d20b97e53ae4133a7aae10b3e4e3ae1/artifacts/model_state_dict.pt")
     prod_state_dict = prod_model.state_dict()
     
     # Adjust the labels according to stack requirements
     prod_state_dict = assign_sigmanet_label(state_dict=prod_state_dict)
 
     # Export the production model to JSON
-    export_to_json(state_dict=prod_state_dict, output_path="test_prod_model_twobody.json")
+    export_to_json(state_dict=prod_state_dict, output_path=f"prod_model_{NBODY_MODEL}.json")
     print("Production model exported successfully!")

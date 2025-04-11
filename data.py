@@ -235,9 +235,10 @@ class LHCbMCModule:
             self._initialize_preprocessor(feature_config_file=feature_config_file)
 
             # Apply preprocessing to train and test data
-            # Only preprocess the feature columns
-            subset_train = train_data[self.feature_cols + ["class_label", "channel"]]
-            subset_test = test_data[self.feature_cols + ["class_label", "channel"]] # add lifetime for efficiency plots - not as a feature
+            # Only preprocess the feature columns and shuffle completely
+            # shuffle to ensure complete mixing of signal and background - even at small stats
+            subset_train = train_data[self.feature_cols + ["class_label", "channel"]].sample(frac=1.0, random_state=42)
+            subset_test = test_data[self.feature_cols + ["class_label", "channel"]].sample(frac=1.0, random_state=42) # add lifetime for efficiency plots - not as a feature
 
             # Fit and transform on training data
             processed_train = self._preprocessor.fit_transform(

@@ -90,7 +90,7 @@ class ModelEvaluator:
         data_module = LHCbMCModule(train_data_path=train_path, test_data_path=test_path)
 
         # Setup the data module to initialize preprocessing
-        trigger = self.config.get("trigger", "TwoBody")
+        trigger = self.config.get("trigger", "ThreeBody")
         data_module.setup_for_viz(
             batch_size=self.config["training"]["batch_size"],
             scale_factor=1.0,  # self.config["training"]["training_data_scale_factor"],
@@ -115,7 +115,7 @@ class ModelEvaluator:
         model_config_path = f"config/model/{architecture}.yaml"
         model_config = self.load_config(model_config_path)
         hidden_dims = model_config.get("layer_dims", [128, 128, 128, 128, 128])
-
+        breakpoint()
         # Create appropriate model based on architecture
         if "lipschitz" in architecture:
 
@@ -165,7 +165,7 @@ class ModelEvaluator:
             logger.info(f"Created UnconstrainedNet model using default architecture")
         try:
             # Load state dict
-            model = load_from_pt(self.model_path) # ensured nominal prescription
+            model.load_state_dict(torch.load(self.model_path)) # locally, we actually just need to load the state; load_from_pt() in LHCb stack, where weight reg is absent
             logger.info("Model loaded successfully")
         except Exception as e:
             logger.error(f"Error loading model state dict: {e}")
@@ -236,8 +236,9 @@ def main():
     """Run inference and save results."""
     # Define paths
     config_path = "/work/submit/blaised/TopoNNOps/config/config.yaml"
-    model_path = "/work/submit/blaised/TopoNNOps/mlruns/1/f4afd7152fa3499097e0a8b437ae2123/artifacts/model_state_dict.pt"
-    output_path = "/ceph/submit/data/user/b/blaised/hlt2topo_sp_2025/evals/twobody_nominal.pkl"  # Path to save the output dataframe
+    # model_path = "/work/submit/blaised/TopoNNOps/mlruns/3/a77b1e292859425c850882df170f1772/artifacts/model_state_dict.pt"\
+    model_path = "/work/submit/blaised/TopoNNOps/mlruns/3/4d20b97e53ae4133a7aae10b3e4e3ae1/artifacts/model_state_dict.pt"
+    output_path = "/ceph/submit/data/user/b/blaised/hlt2topo_sp_2025/evals/threebody_nominal.pkl"  # Path to save the output dataframe
 
     # Create output directory if it doesn't exist
     if output_path:

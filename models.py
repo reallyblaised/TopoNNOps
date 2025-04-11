@@ -308,7 +308,7 @@ class LipschitzNet(nn.Module):
         # Add hidden layers
         for idx, dim in enumerate(self.layer_dims):
             # Add LipschitzLinear layer with appropriate kind
-            layers.append(lmn.LipschitzLinear(in_features, dim, kind=layer_kinds[idx]))
+            layers.append(lmn.LipschitzLinear(in_features, dim, kind=layer_kinds[idx], lipschitz_const=self.lip_const))
 
             # Add activation function (GroupSort with dim // 2 groups)
             layers.append(
@@ -318,7 +318,7 @@ class LipschitzNet(nn.Module):
             in_features = dim
 
         # Add output layer
-        layers.append(lmn.LipschitzLinear(in_features, 1, kind=layer_kinds[-1]))
+        layers.append(lmn.LipschitzLinear(in_features, 1, kind=layer_kinds[-1], lipschitz_const=self.lip_const))
 
         # Create the sequential model
         model = nn.Sequential(*layers)
