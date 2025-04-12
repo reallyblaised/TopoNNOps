@@ -514,6 +514,7 @@ def single_gpu_training(cfg: DictConfig) -> None:
                 "constraint.1", "Monotonically increasing (at the partials)"
             )
             # Log model with detailed metadata
+            breakpoint()
             log_model_with_metadata(model, data_module, cfg)
             logger.info("Training completed successfully!")
 

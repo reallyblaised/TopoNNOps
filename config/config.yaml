@@ -1,6 +1,6 @@
 # MLflow configuration
 mlflow:
-  experiment_name: "stree_tests"
+  experiment_name: "stack_bugfix"
   tracking_uri: "http://localhost:5000"  # Update with your MLflow server
   tags:
     project: "TopoNBody Training [inclusive B]"
@@ -19,7 +19,7 @@ defaults:
   - _self_
 
 # Path to features configuration file (with monotonicity constraints)
-trigger: ThreeBody # NOTE: CHANGE ALSO IN PATHS MODEL YAML FILE
+trigger: TwoBody # NOTE: CHANGE ALSO IN PATHS MODEL YAML FILE
 features_config_path: "config/features.yml"
 
 # Metrics configuration
@@ -53,6 +53,6 @@ scheduler:
 # Data paths
 paths:
   # 2025 tuning samples
-  train_data: "/ceph/submit/data/user/b/blaised/hlt2topo_sp/scratch/ThreeBody/imbalanced/train.pkl" # no preprocessing from data pipeline; handles by DataModule here()
-  test_data: "/ceph/submit/data/user/b/blaised/hlt2topo_sp/scratch/ThreeBody/imbalanced/test.pkl" # idem=
+  train_data: "/ceph/submit/data/user/b/blaised/hlt2topo_sp/scratch/TwoBody/imbalanced/train_dev.pkl" # no preprocessing from data pipeline; handles by DataModule here()
+  test_data: "/ceph/submit/data/user/b/blaised/hlt2topo_sp/scratch/TwoBody/imbalanced/test_dev.pkl" # idem=
   model_save_dir: "./models"

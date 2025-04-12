@@ -6,7 +6,7 @@ layer_dims: [128, 128, 128, 128, 128, 128, 128]
 # Lipschitz-specific parameters
 activation_fn: "groupsort"
 lip_const: 2.0
-nbody: "ThreeBody"
+nbody: "TwoBody"
 monotonic: true  # Flag to enforce monotonicity constraints
 lip_kind: "nominal" # Options: "nominal", "default", "one"
 

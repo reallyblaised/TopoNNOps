@@ -5,11 +5,11 @@ from models import LipschitzNet
 from data import LHCbMCModule
 from typing import Dict, Optional, List
 
-NBODY_MODEL = "ThreeBody"
+NBODY_MODEL = "TwoBody"
 NN_SCHEMA = "nominal"
 
 
-def load_from_pt(filename, apply_normalization=True, hidden_layer_dims=[128, 128, 128, 128, 128, 128, 128]):
+def load_into_lipnn(filename, hidden_layer_dims=[128, 128, 128, 128, 128, 128, 128]):
     """
     Load a model with the standard architecture (n layers with Lipschitz constraints).
     
@@ -46,58 +46,12 @@ def load_from_pt(filename, apply_normalization=True, hidden_layer_dims=[128, 128
         lip_kind=NN_SCHEMA
     )
 
-    # If normalization is requested, apply Lipschitz normalization to weights
-    if apply_normalization:
-        # Find all weight keys in the state dict that need normalization
-        weight_keys = [k for k in state_dict.keys() if '.parametrizations.weight.original' in k]
-        weight_keys.sort()  # Ensure consistent ordering by layer
-        
-        # Create a copy of the state dict to modify
-        normalized_state_dict = state_dict.copy()
-
-        # Apply appropriate normalization to each layer's weights
-        for i, key in enumerate(weight_keys):
-            # Determine normalization type based on layer position -- nominal prescription
-            if i == 0:
-                norm_type = "one-inf"  # First layer 
-            elif i == len(weight_keys) - 1:
-                norm_type = "one"      # Last layer
-            else:
-                norm_type = "inf"      # Middle layers
-
-            # Apply normalization using monotonicnetworks library
-            normalized_weight = lmn.get_normed_weights(
-                state_dict[key],
-                kind=norm_type,
-                always_norm=False,
-                max_norm=lipschitz_const,
-                vectorwise=True  # Assuming vectorwise normalization as in original code
-            )
-            
-            # Update state dict with normalized weights
-            normalized_state_dict[key] = normalized_weight
-            print(f"Normalized layer {i} weights using {norm_type} constraint")
-        
-        # Use the normalized state dict for loading
-        state_dict = normalized_state_dict
-
     # Load the weights into the model
     try:
         model.load_state_dict(state_dict, strict=True)
         print("Successfully loaded weights into model")
     except Exception as e:
-        print(f"Warning: Error during weight loading: {e}")
-        print("Attempting fallback loading method...")
-        
-        # Fallback method: manual parameter assignment
-        for name, param in model.named_parameters():
-            model_prefixed_name = 'model.' + name
-            if name in state_dict:
-                param.data.copy_(state_dict[name])
-            elif model_prefixed_name in state_dict:
-                param.data.copy_(state_dict[model_prefixed_name])
-        
-        print("Fallback loading completed")
+        raise ValueError(f"Error during weight loading: {e}")
 
     return model
 
@@ -154,25 +108,59 @@ def assign_sigmanet_label(state_dict: Dict) -> Dict:
     Dict
         modified state_dict model
     """
-    dict_keys = list(state_dict.keys())
-    for key in dict_keys:
-        if "lipschitz_const" in key:
-            del state_dict[key]
-        elif "monotonic_constraints" in key:
-            del state_dict[key]
-        else:
-            # Add leading zero for single-digit numbers in the key to meet the stack requirements: if <10, leading zero
-            new_key = key
-            if "nn." in key:
-                parts = key.split(".")
-                for i, part in enumerate(parts):
-                    if part.isdigit() and len(part) == 1:
-                        parts[i] = f"{int(part):02d}"
-                new_key = ".".join(parts)
-            state_dict["sigmanet." + new_key] = state_dict[key]
-            del state_dict[key]
+    production_dictionary = {} # what gets portd to the LHCb stack
+
+
+    # Find all weight keys in the state dict that need normalization
+    weight_keys = [k for k in state_dict.keys() if '.parametrizations.weight.original' in k]
+
+    # load the global Lipschitz constant
+    lipschitz_const = state_dict['model.lipschitz_const']
+
+    # log into production dictionary
+    production_dictionary['sigmanet.sigma'] = [lipschitz_const.item()]
+
+    # Apply appropriate normalization to each layer's weights
+    for i, key in enumerate(weight_keys):
+
+        # extract the layer number and format with leading zero if single digit - for the stack 
+        layer_num_str = (lambda k: f"{int(next(part for part in k.split('.') if part.isdigit())):02d}")(key) # eg 00, 01, 02, ...
     
-    return state_dict
+
+        # fetch the corresponding bias and assign to the production dictionary; no normalisation required
+        production_dictionary[f'sigmanet.nn.{layer_num_str}.bias'] = state_dict[key.replace('.parametrizations.weight.original', '.bias')]
+
+        # verify compatibility with the global lipschitz constant, layer-wise
+        assert state_dict[key.replace('.parametrizations.weight.original', '.lipschitz_const')] == lipschitz_const.item(), "Layer-wise Lipschitz constant does not match global Lipschitz constant"
+
+        # Determine normalization type based on layer position -- nominal prescription
+        if i == 0:
+            norm_type = "one-inf"  # First layer 
+        elif i == len(weight_keys) - 1:
+            norm_type = "one"      # Last layer
+            assert state_dict[key].shape[0] == 1, "Last layer must have 1 output dimension"
+        else:
+            norm_type = "inf"      # Middle layers
+
+        # Apply normalization using monotonicnetworks library
+        normalized_weight = lmn.get_normed_weights(
+            state_dict[key],
+            kind=norm_type,
+            always_norm=False,
+            max_norm=lipschitz_const,
+            vectorwise=True  # Assuming vectorwise normalization as in original code
+        )
+
+        # log the normalised weights into the production dictionary
+        production_dictionary[f'sigmanet.nn.{layer_num_str}.parametrizations.weight.original'] = normalized_weight
+
+        print(f"Layer number: {layer_num_str}; index: {i}")
+        print(f"Normalization type: {norm_type}")
+        print(f"Normalized weight shape: {normalized_weight.shape}")
+        print(f"Normalized weight: {normalized_weight}")
+        print(f"Bias vector shape: {production_dictionary[f'sigmanet.nn.{layer_num_str}.bias'].shape}")
+
+    return production_dictionary
 
 
 def export_to_json(state_dict: Dict, output_path: str) -> None:
@@ -336,11 +324,11 @@ if __name__ == "__main__":
 
     # # Production model loading and export - uncomment to test
     print("\nLoading production model:")
-    prod_model = load_from_pt("/work/submit/blaised/TopoNNOps/mlruns/3/4d20b97e53ae4133a7aae10b3e4e3ae1/artifacts/model_state_dict.pt")
-    prod_state_dict = prod_model.state_dict()
-    
+    #trained_state_dict = torch.load("/work/submit/blaised/TopoNNOps/mlruns/3/a77b1e292859425c850882df170f1772/artifacts/model_state_dict.pt") # twobody nominal
+    trained_state_dict = torch.load("/work/submit/blaised/TopoNNOps/mlruns/3/4d20b97e53ae4133a7aae10b3e4e3ae1/artifacts/model_state_dict.pt") # threebody nominal
+
     # Adjust the labels according to stack requirements
-    prod_state_dict = assign_sigmanet_label(state_dict=prod_state_dict)
+    prod_state_dict = assign_sigmanet_label(state_dict=trained_state_dict)
 
     # Export the production model to JSON
     export_to_json(state_dict=prod_state_dict, output_path=f"prod_model_{NBODY_MODEL}.json")
