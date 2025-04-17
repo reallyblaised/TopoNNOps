@@ -24,9 +24,10 @@ class EnhancedDataPreprocessor:
         self,
         gev_vars: Tuple[str, ...] = None,
         log_vars: Tuple[str, ...] = None,
+        tenx_vars: Tuple[str, ...] = None,
         unchanged_vars: Tuple[str, ...] = None,
         background_channel: str = "minbias",
-        clip_quantiles: Tuple[float, float] = (0.001, 0.999),
+        clip_quantiles: Tuple[float, float] = (0.0001, 0.9999),
         normalize: bool = True,
         log_dir: str = "./preprocessing_logs",
         verbose: bool = True,
@@ -55,6 +56,7 @@ class EnhancedDataPreprocessor:
         """
         self.gev_vars = gev_vars or ()
         self.log_vars = log_vars or ()
+        self.tenx_vars = tenx_vars or ()
         self.unchanged_vars = unchanged_vars or ()
         self.background_channel = background_channel
         self.clip_quantiles = clip_quantiles
@@ -77,6 +79,8 @@ class EnhancedDataPreprocessor:
             self.transformations[var] = "gev"
         for var in self.log_vars:
             self.transformations[var] = "log"
+        for var in self.tenx_vars:
+            self.transformations[var] = "tenx"
         for var in self.unchanged_vars:
             self.transformations[var] = "none"
 
@@ -87,6 +91,7 @@ class EnhancedDataPreprocessor:
         self.logger.info("Initialized EnhancedDataPreprocessor:")
         self.logger.info(f"GeV variables: {self.gev_vars}")
         self.logger.info(f"Log variables: {self.log_vars}")
+        self.logger.info(f"Tenx variables: {self.tenx_vars}")
         self.logger.info(f"Unchanged variables: {self.unchanged_vars}")
         self.logger.info(f"Clipping quantiles: {self.clip_quantiles}")
         self.logger.info(f"Normalization enabled: {self.normalize}")
@@ -224,6 +229,10 @@ class EnhancedDataPreprocessor:
 
                 # Store epsilon for this feature
                 self.feature_stats[f"{column}_epsilon"] = epsilon
+            elif transform_type == "tenx":
+                self.logger.info(f"Applying 10x scaling to '{column}'")
+                values = values * 10.0
+                transformed_df[column] = transformed_df[column] * 10.0
             elif transform_type == "none":
                 self.logger.info(f"No transformation for '{column}'")
 
@@ -355,6 +364,9 @@ class EnhancedDataPreprocessor:
                 self.logger.info(
                     f"Applied log transform to '{column}' with epsilon={epsilon}"
                 )
+            elif transform_type == "tenx":
+                result_df[column] = result_df[column] * 10.0
+                self.logger.info(f"Applied 10x scaling to '{column}'")
             elif transform_type == "none":
                 self.logger.info(f"No transformation needed for '{column}'")
 
@@ -605,6 +617,7 @@ class EnhancedDataPreprocessor:
                     {
                         "gev_vars": self.gev_vars,
                         "log_vars": self.log_vars,
+                        "tenx_vars": self.tenx_vars,
                         "unchanged_vars": self.unchanged_vars,
                         "background_channel": self.background_channel,
                         "clip_quantiles": self.clip_quantiles,
@@ -633,6 +646,7 @@ class EnhancedDataPreprocessor:
             preprocessor = cls(
                 gev_vars=config["gev_vars"],
                 log_vars=config["log_vars"],
+                tenx_vars=config["tenx_vars"],
                 unchanged_vars=config.get("unchanged_vars", ()),
                 background_channel=config["background_channel"],
                 clip_quantiles=config["clip_quantiles"],
@@ -929,6 +943,7 @@ class EnhancedDataPreprocessor:
             f.write(
                 f"- Log transform variables: {', '.join(self.log_vars) or 'None'}\n"
             )
+            f.write(f"- Tenx scaling variables: {', '.join(self.tenx_vars) or 'None'}\n")
             f.write(
                 f"- Unchanged variables: {', '.join(self.unchanged_vars) or 'None'}\n"
             )
@@ -1007,6 +1022,7 @@ class DataPreprocessor:
         self,
         gev_vars: Tuple[str, ...] = None,
         log_vars: Tuple[str, ...] = None,
+        tenx_vars: Tuple[str, ...] = None,
         unchanged_vars: Tuple[str, ...] = None,  # New parameter
         background_channel: str = "minbias",
         clip_quantiles: Tuple[float, float] = (0.001, 0.999),
@@ -1023,6 +1039,8 @@ class DataPreprocessor:
             Variables to be log-transformed
         unchanged_vars : tuple of str
             Variables to include in normalization without any prior transformation
+        tenx_vars : tuple of str
+            Variables to be scaled by 10
         background_channel : str
             Name of the background channel in the dataset
         clip_quantiles : tuple of (lower, upper)
@@ -1033,6 +1051,7 @@ class DataPreprocessor:
         self.gev_vars = gev_vars or ()
         self.log_vars = log_vars or ()
         self.unchanged_vars = unchanged_vars or ()  # Store the new parameter
+        self.tenx_vars = tenx_vars or ()
         self.background_channel = background_channel
         self.clip_quantiles = clip_quantiles
         self.normalize = normalize
@@ -1043,6 +1062,8 @@ class DataPreprocessor:
             self.transformations[var] = "gev"
         for var in self.log_vars:
             self.transformations[var] = "log"
+        for var in self.tenx_vars:
+            self.transformations[var] = "tenx"
         for var in self.unchanged_vars:
             self.transformations[var] = "none"  # Add unchanged variables
 
@@ -1099,6 +1120,8 @@ class DataPreprocessor:
 
                 # Store epsilon for this feature
                 self.feature_stats[f"{column}_epsilon"] = epsilon
+            elif transform_type == "tenx":
+                values = values * 10.0
             elif transform_type == "none":
                 # No transformation needed for unchanged variables
                 pass
@@ -1160,6 +1183,8 @@ class DataPreprocessor:
             elif transform_type == "log":
                 epsilon = self.feature_stats.get(f"{column}_epsilon", 1e-6)
                 result_df[column] = np.log(result_df[column] + epsilon)
+            elif transform_type == "tenx":
+                result_df[column] = result_df[column] * 10.0
             elif transform_type == "none":
                 # No transformation for unchanged variables
                 pass
@@ -1170,10 +1195,14 @@ class DataPreprocessor:
             if lower is not None and upper is not None:
                 result_df[column] = result_df[column].clip(lower, upper)
 
-            # Apply normalization if needed
+            # check the new upper and lower bounds of the data effectively match the max and min of the data
+            assert np.abs(np.max(result_df[column]) - upper) < 1e-6, "Post-clipping upper bound is not as expected"
+            assert np.abs(np.min(result_df[column]) - lower) < 1e-6, "Post-clipping lower bound is not as expected"
+
+            # Apply normalization if needed to the clip extrema, which are now the min and max of the data
             if self.normalize:
-                min_val = self.feature_stats.get(f"{column}_min")
-                max_val = self.feature_stats.get(f"{column}_max")
+                min_val = self.feature_stats.get(f"{column}_lower")
+                max_val = self.feature_stats.get(f"{column}_upper")
                 if min_val is not None and max_val is not None and max_val > min_val:
                     result_df[column] = (result_df[column] - min_val) / (
                         max_val - min_val
@@ -1340,6 +1369,7 @@ class DataPreprocessor:
                 {
                     "gev_vars": self.gev_vars,
                     "log_vars": self.log_vars,
+                    "tenx_vars": self.tenx_vars,
                     "unchanged_vars": self.unchanged_vars,  # Save the new parameter
                     "background_channel": self.background_channel,
                     "clip_quantiles": self.clip_quantiles,
@@ -1374,6 +1404,7 @@ class DataPreprocessor:
         preprocessor = cls(
             gev_vars=config["gev_vars"],
             log_vars=config["log_vars"],
+            tenx_vars=config["tenx_vars"],
             unchanged_vars=config.get(
                 "unchanged_vars", ()
             ),  # Handle loading from older files

@@ -325,7 +325,7 @@ if __name__ == "__main__":
     # # Production model loading and export - uncomment to test
     print("\nLoading production model:")
     #trained_state_dict = torch.load("/work/submit/blaised/TopoNNOps/mlruns/3/a77b1e292859425c850882df170f1772/artifacts/model_state_dict.pt") # twobody nominal
-    trained_state_dict = torch.load("/work/submit/blaised/TopoNNOps/mlruns/3/4d20b97e53ae4133a7aae10b3e4e3ae1/artifacts/model_state_dict.pt") # threebody nominal
+    trained_state_dict = torch.load("/work/submit/blaised/TopoNNOps/mlruns/5/0048a199fc4b41079083ce201b598d95/artifacts/model_state_dict.pt") # twobody nominal
 
     # Adjust the labels according to stack requirements
     prod_state_dict = assign_sigmanet_label(state_dict=trained_state_dict)

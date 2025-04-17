@@ -52,10 +52,58 @@ class Trainer:
             model=model, feature_names=feature_names, device=device
         )
         self.weight_viz = WeightVisualizer(model=model, feature_names=feature_names)
+        
+        # Initialize gradient and weight tracking
+        self.grad_stats_history = []
+        self.weight_stats_history = []
+
+    def _compute_parameter_stats(self) -> Tuple[Dict[str, float], Dict[str, float]]:
+        """Compute gradient and weight statistics for monitoring"""
+        grad_stats = {}
+        weight_stats = {}
+        
+        # Calculate statistics for each parameter
+        for name, param in self.model.named_parameters():
+            # Skip non-parameter tensors
+            if param.requires_grad is False or param.grad is None:
+                continue
+                
+            # Get weights and gradients
+            weights = param.detach().cpu()
+            grads = param.grad.detach().cpu()
+            
+            # Weight stats
+            weight_abs = weights.abs()
+            weight_stats[f"{name}_mean"] = weights.mean().item()
+            weight_stats[f"{name}_abs_mean"] = weight_abs.mean().item()
+            weight_stats[f"{name}_abs_max"] = weight_abs.max().item()
+            weight_stats[f"{name}_norm"] = weights.norm().item()
+            
+            # Gradient stats
+            grad_abs = grads.abs()
+            grad_stats[f"{name}_mean"] = grads.mean().item()
+            grad_stats[f"{name}_abs_mean"] = grad_abs.mean().item()
+            grad_stats[f"{name}_abs_max"] = grad_abs.max().item()
+            grad_stats[f"{name}_norm"] = grads.norm().item()
+        
+        # Calculate aggregated statistics
+        grad_abs_means = [v for k, v in grad_stats.items() if k.endswith("_abs_mean")]
+        weight_abs_means = [v for k, v in weight_stats.items() if k.endswith("_abs_mean")]
+        
+        # Overall statistics
+        grad_stats["overall_abs_mean"] = np.mean(grad_abs_means) if grad_abs_means else 0
+        grad_stats["overall_abs_min"] = np.min(grad_abs_means) if grad_abs_means else 0  
+        grad_stats["overall_abs_max"] = np.max(grad_abs_means) if grad_abs_means else 0
+        
+        weight_stats["overall_abs_mean"] = np.mean(weight_abs_means) if weight_abs_means else 0
+        weight_stats["overall_abs_min"] = np.min(weight_abs_means) if weight_abs_means else 0
+        weight_stats["overall_abs_max"] = np.max(weight_abs_means) if weight_abs_means else 0
+        
+        return grad_stats, weight_stats
 
     def _train_step(
         self, X: torch.Tensor, y: torch.Tensor
-    ) -> Tuple[float, torch.Tensor]:
+    ) -> Tuple[float, torch.Tensor, Dict[str, float], Dict[str, float]]:
         """Single training step with mixed precision support"""
         X, y = X.to(self.device), y.to(self.device)
 
@@ -66,7 +114,6 @@ class Trainer:
         with torch.autocast(self.device.type, enabled=self.use_mixed_precision):
             outputs = self.model(X)
             loss = self.criterion(outputs, y.unsqueeze(1))
-
             # Add L1 regularization if applicable
             if hasattr(self.model, "get_l1_loss"):
                 loss += self.model.get_l1_loss()
@@ -79,6 +126,10 @@ class Trainer:
                 torch.nn.utils.clip_grad_norm_(
                     self.model.parameters(), self.grad_clip_val
                 )
+            # Compute gradient & weight statistics before optimizer step - unscale first
+            self.scaler.unscale_(self.optimizer)
+            grad_stats, weight_stats = self._compute_parameter_stats()
+            
             self.scaler.step(self.optimizer)
             self.scaler.update()
         else:
@@ -87,9 +138,12 @@ class Trainer:
                 torch.nn.utils.clip_grad_norm_(
                     self.model.parameters(), self.grad_clip_val
                 )
+            # Compute gradient & weight statistics before optimizer step
+            grad_stats, weight_stats = self._compute_parameter_stats()
+            
             self.optimizer.step()
 
-        return loss.item(), outputs
+        return loss.item(), outputs, grad_stats, weight_stats
 
     def train(
         self,
@@ -123,9 +177,20 @@ class Trainer:
 
             # Training phase
             self.model.train()
+
             train_losses = []
             all_train_outputs = []
             all_train_targets = []
+            epoch_grad_stats = {
+                "overall_abs_mean": [],
+                "overall_abs_min": [],
+                "overall_abs_max": [],
+            }
+            epoch_weight_stats = {
+                "overall_abs_mean": [],
+                "overall_abs_min": [],
+                "overall_abs_max": [],
+            }
 
             # Only show progress bar on master process to avoid output clutter
             if not self.is_distributed or self.is_master:
@@ -135,8 +200,16 @@ class Trainer:
                 train_iter = train_loader
 
             for X, y in train_iter:
-                batch_loss, outputs = self._train_step(X, y)
+                batch_loss, outputs, grad_stats, weight_stats = self._train_step(X, y)
                 train_losses.append(batch_loss)
+                
+                # Collect gradient and weight stats
+                for key in epoch_grad_stats.keys():
+                    if key in grad_stats:
+                        epoch_grad_stats[key].append(grad_stats[key])
+                for key in epoch_weight_stats.keys():
+                    if key in weight_stats:
+                        epoch_weight_stats[key].append(weight_stats[key])
 
                 # Collect outputs and targets even in distributed mode for the master process
                 # This is used for visualizations later
@@ -151,6 +224,14 @@ class Trainer:
 
             # Calculate epoch metrics
             train_loss = np.mean(train_losses)
+            
+            # Average gradient and weight stats across batches
+            avg_grad_stats = {k: np.mean(v) for k, v in epoch_grad_stats.items() if v}
+            avg_weight_stats = {k: np.mean(v) for k, v in epoch_weight_stats.items() if v}
+            
+            # Store for history
+            self.grad_stats_history.append(avg_grad_stats)
+            self.weight_stats_history.append(avg_weight_stats)
 
             # Synchronize loss across processes in distributed mode
             if self.is_distributed:
@@ -170,6 +251,9 @@ class Trainer:
                 if self.scheduler:
                     history["learning_rates"].append(self.scheduler.get_last_lr()[0])
 
+                # Generate gradient and weight magnitude report
+                self._print_parameter_stats_report(avg_grad_stats, avg_weight_stats, epoch)
+
                 # Log metrics and visualizations
                 self._log_epoch_info(
                     train_loss=train_loss,
@@ -182,10 +266,12 @@ class Trainer:
                     train_targets=(
                         np.array(all_train_targets) if all_train_targets else None
                     ),
+                    grad_stats=avg_grad_stats,
+                    weight_stats=avg_weight_stats
                 )
 
                 # Generate visualizations periodically
-                if epoch % 20 == 0 or epoch == num_epochs - 1:
+                if epoch % 10 == 0 or epoch == num_epochs - 1:
                     self._generate_visualizations(history, epoch)
 
             # Learning rate scheduling - must happen on all processes
@@ -219,6 +305,33 @@ class Trainer:
                         break
 
         return history
+        
+    def _print_parameter_stats_report(self, grad_stats: Dict[str, float], weight_stats: Dict[str, float], epoch: int) -> None:
+        """Print a concise report of gradient and weight statistics"""
+        print(f"\n===== PARAMETER STATS REPORT - EPOCH {epoch+1} =====")
+        
+        # Gradient report
+        print("\nGRADIENT STATISTICS:")
+        print(f"  Mean absolute gradient: {grad_stats.get('overall_abs_mean', 0):.8f}")
+        print(f"  Min absolute gradient: {grad_stats.get('overall_abs_min', 0):.8f}")
+        print(f"  Max absolute gradient: {grad_stats.get('overall_abs_max', 0):.8f}")
+        
+        # Warning for vanishing gradients
+        if grad_stats.get('overall_abs_mean', 0) < 1e-4:
+            print("  ⚠️ WARNING: Potential vanishing gradients detected!")
+        
+        # Weight report
+        print("\nWEIGHT STATISTICS:")
+        print(f"  Mean absolute weight: {weight_stats.get('overall_abs_mean', 0):.6f}")
+        print(f"  Min absolute weight: {weight_stats.get('overall_abs_min', 0):.6f}")
+        print(f"  Max absolute weight: {weight_stats.get('overall_abs_max', 0):.6f}")
+        
+        # Weight-to-gradient ratio
+        if grad_stats.get('overall_abs_mean', 0) > 0:
+            w2g_ratio = weight_stats.get('overall_abs_mean', 0) / grad_stats.get('overall_abs_mean', 0)
+            print(f"\nWeight-to-gradient ratio: {w2g_ratio:.2f}")
+        
+        print("=================================================\n")
 
     def evaluate(
         self,
@@ -236,7 +349,6 @@ class Trainer:
         with torch.no_grad():
             for X, y in val_loader:
                 X, y = X.to(self.device), y.to(self.device)
-
                 with torch.autocast(self.device.type, enabled=self.use_mixed_precision):
                     outputs = self.model(X)
                     loss = self.criterion(outputs, y.unsqueeze(1))
@@ -291,6 +403,8 @@ class Trainer:
         epoch_time: float,
         train_outputs: Optional[np.ndarray],
         train_targets: Optional[np.ndarray],
+        grad_stats: Optional[Dict[str, float]] = None,
+        weight_stats: Optional[Dict[str, float]] = None,
     ) -> None:
         """Log comprehensive epoch information to MLflow (master process only)"""
         if self.is_distributed and not self.is_master:
@@ -312,6 +426,28 @@ class Trainer:
         if train_outputs is not None and train_targets is not None:
             mlflow.log_metric("train_pred_mean", train_outputs.mean(), step=epoch)
             mlflow.log_metric("train_pred_std", train_outputs.std(), step=epoch)
+            
+        # Log gradient statistics if available
+        if grad_stats:
+            for stat_name, stat_value in grad_stats.items():
+                mlflow.log_metric(f"grad_{stat_name}", stat_value, step=epoch)
+            
+            # Log a vanishing gradient flag
+            if grad_stats.get('overall_abs_mean', 0) < 1e-4:
+                mlflow.log_metric("vanishing_gradient_warning", 1, step=epoch)
+            else:
+                mlflow.log_metric("vanishing_gradient_warning", 0, step=epoch)
+                
+        # Log weight statistics if available
+        if weight_stats:
+            for stat_name, stat_value in weight_stats.items():
+                mlflow.log_metric(f"weight_{stat_name}", stat_value, step=epoch)
+                
+        # Log weight-to-gradient ratio
+        if grad_stats and weight_stats:
+            if grad_stats.get('overall_abs_mean', 0) > 0:
+                w2g_ratio = weight_stats.get('overall_abs_mean', 0) / grad_stats.get('overall_abs_mean', 0)
+                mlflow.log_metric("weight_to_gradient_ratio", w2g_ratio, step=epoch)
 
     def _generate_visualizations(
         self,
