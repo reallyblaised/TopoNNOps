@@ -6,7 +6,7 @@ from typing import Union, Dict, List, Tuple
 import yaml
 from torch.utils.data.distributed import DistributedSampler
 from preprocessing import DataPreprocessor
-
+import json
 
 class LHCbMCModule:
     def __init__(
@@ -111,6 +111,7 @@ class LHCbMCModule:
         # Prepare lists for each transformation type
         gev_vars = []
         log_vars = []
+        tenx_vars = []
         unchanged_vars = []
 
         # Parse the transformations
@@ -121,17 +122,21 @@ class LHCbMCModule:
                 gev_vars.append(feature)
             elif transform_type == "log":
                 log_vars.append(feature)
+            elif transform_type == "tenx":
+                tenx_vars.append(feature)
             else:
                 # Any feature without an explicit transform goes to unchanged_vars
                 unchanged_vars.append(feature)
 
         # sanity check: all features preserved + no erroenous inclusion of observables as features (which we woudl need for efficiency plots)
-        assert len(gev_vars) + len(log_vars) + len(unchanged_vars) == len(feature_list), "Number of features in the preprocessor does not match the number of features in the config file"
+        assert len(gev_vars) + len(log_vars) + len(unchanged_vars) + len(tenx_vars) == len(feature_list), "Number of features in the preprocessor does not match the number of features in the config file"
+        assert len(unchanged_vars) == 0, "Unchanged variables not implemented in the LHCb stack"
 
         # Create preprocessor with proper configs
         self._preprocessor = DataPreprocessor(
             gev_vars=tuple(gev_vars),
             log_vars=tuple(log_vars),
+            tenx_vars=tuple(tenx_vars),
             unchanged_vars=tuple(unchanged_vars),
             background_channel="minbias",
             clip_quantiles=(0.001, 0.999),
@@ -145,7 +150,7 @@ class LHCbMCModule:
         return self._preprocessor if hasattr(self, "_preprocessor") else None
 
     def _process_sb_data(
-        self, train_data: pd.DataFrame, scale_factor: float = 1.0, ratio: float = 0.1
+        self, train_data: pd.DataFrame, scale_factor: float = 1.0, ratio: float = 0.1, balance: bool = True
     ):
         """Setup with controlled background-to-signal ratio and scale factor"""
         # Split background and signal
@@ -154,6 +159,7 @@ class LHCbMCModule:
 
         # Calculate samples to take
         n_background = int(len(background) * scale_factor)
+
         if ratio:
             n_signal = int(
                 n_background * ratio
@@ -232,7 +238,7 @@ class LHCbMCModule:
         # Apply preprocessing if requested
         if apply_preprocessing:
             # Initialize the preprocessor with transformation configs
-            self._initialize_preprocessor(feature_config_file=feature_config_file)
+            self._initialize_preprocessor(feature_config_file=feature_config_file, model=model)
 
             # Apply preprocessing to train and test data
             # Only preprocess the feature columns and shuffle completely
@@ -244,6 +250,25 @@ class LHCbMCModule:
             processed_train = self._preprocessor.fit_transform(
                 subset_train, balance=balance_train_sample
             )
+        
+            # ------------------------------------------------------------------------------------------------
+            # Export bounds post scaling for stack integration
+            # ================================================================================================
+            # export the feature bounds to json file in the format feature: [lower bound, upper bound]
+            feature_bounds = {}
+            for feat in self.feature_cols:
+                feature_bounds[feat] = [
+                    float(self._preprocessor.feature_stats[f"{feat}_lower"]), 
+                    float(self._preprocessor.feature_stats[f"{feat}_upper"])
+                ]
+            # Print feature bounds for debugging and verification
+            print("\nFeature bounds after preprocessing:")
+            print(feature_bounds)
+            # save the feature bounds to a json file
+            with open(f"feature_bounds_postscaling_{model}.json", "w") as f:
+                json.dump(feature_bounds, f)
+            # ------------------------------------------------------------------------------------------------
+
             # Transform test data using the same fitted preprocessor
             processed_test = self._preprocessor.transform(subset_test)
 
@@ -278,7 +303,7 @@ class LHCbMCModule:
         # HACK - print the population to get a feel for the signal abundance relative to bkg
         print(f"Ad-hoc debug: {processed_train.channel.value_counts()}")
 
-        # Store the tensors for direct access
+        # Store the tensoevars for direct access
         self.X_train = X_train
         self.y_train = y_train
         self.X_test = X_test
@@ -295,6 +320,7 @@ class LHCbMCModule:
         self.test_loader = DataLoader(
             test_dataset, batch_size=batch_size, shuffle=True
         )  # NOTE: shuffling aids the inclusion of both classes in each batch - less important if I balance the dataset beforehand; can cause training instability in test loss
+
         self.input_dim = len(self.feature_cols)
 
     def setup_for_viz(
@@ -342,7 +368,7 @@ class LHCbMCModule:
         # Apply preprocessing if requested
         if apply_preprocessing:
             # Initialize the preprocessor with transformation configs
-            self._initialize_preprocessor(feature_config_file=feature_config_file)
+            self._initialize_preprocessor(feature_config_file=feature_config_file, model=model)
 
             # Apply preprocessing to train and test data
             # Only preprocess the feature columns

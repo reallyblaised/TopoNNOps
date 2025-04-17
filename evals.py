@@ -12,7 +12,7 @@ from data import LHCbMCModule
 
 # Import model classes from models.py
 from models import LipschitzNet, UnconstrainedNet, LipschitzLegacyNet
-from model_persistence import load_from_pt
+from model_persistence import load_into_lipnn
 
 # Set up logging
 logging.basicConfig(
@@ -94,7 +94,7 @@ class ModelEvaluator:
         data_module.setup_for_viz(
             batch_size=self.config["training"]["batch_size"],
             scale_factor=1.0,  # self.config["training"]["training_data_scale_factor"],
-            ratio=1.0,  # self.config["training"]["sb_ratio"],
+            ratio=None,  # self.config["training"]["sb_ratio"],
             feature_config_file=self.feature_config_file,
             apply_preprocessing=self.config["training"]["apply_preprocessing"],
             balance_train_sample=self.config["training"]["balance_train_sample"],
@@ -115,7 +115,7 @@ class ModelEvaluator:
         model_config_path = f"config/model/{architecture}.yaml"
         model_config = self.load_config(model_config_path)
         hidden_dims = model_config.get("layer_dims", [128, 128, 128, 128, 128])
-        breakpoint()
+
         # Create appropriate model based on architecture
         if "lipschitz" in architecture:
 
@@ -237,8 +237,8 @@ def main():
     # Define paths
     config_path = "/work/submit/blaised/TopoNNOps/config/config.yaml"
     # model_path = "/work/submit/blaised/TopoNNOps/mlruns/3/a77b1e292859425c850882df170f1772/artifacts/model_state_dict.pt"\
-    model_path = "/work/submit/blaised/TopoNNOps/mlruns/3/4d20b97e53ae4133a7aae10b3e4e3ae1/artifacts/model_state_dict.pt"
-    output_path = "/ceph/submit/data/user/b/blaised/hlt2topo_sp_2025/evals/threebody_nominal.pkl"  # Path to save the output dataframe
+    model_path = "/work/submit/blaised/TopoNNOps/mlruns/5/0048a199fc4b41079083ce201b598d95/artifacts/model_state_dict.pt"
+    output_path = "/ceph/submit/data/user/b/blaised/hlt2topo_sp_2025/evals/twobody_nominal.pkl"  # Path to save the output dataframe
 
     # Create output directory if it doesn't exist
     if output_path:
