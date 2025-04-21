@@ -21,6 +21,7 @@ from typing import Optional
 # Set Altair rendering options
 alt.data_transformers.enable("default", max_rows=None)
 
+OBSERVABLE = "_PT"
 
 class ModelPerformance:
     """Model visualization with ROC, PR curves and NN response distributions"""
@@ -101,8 +102,8 @@ class ModelPerformance:
         if channels is not None:
             try:
                 # Look for TwoBody_PT in feature names
-                if "TwoBody_PT" in self.feature_names:
-                    pt_index = self.feature_names.index("TwoBody_PT")
+                if f"{self.model}{OBSERVABLE}" in self.feature_names:
+                    pt_index = self.feature_names.index(f"{self.model}{OBSERVABLE}")
                     pt_values = X_test[:, pt_index]
 
                     # Add standard fixed-threshold efficiency charts
@@ -707,58 +708,6 @@ class ModelPerformance:
 
         return chart
 
-    def _create_feature_correlation_matrices(
-        self, X: np.ndarray, y: np.ndarray
-    ) -> alt.Chart:
-        """Create correlation matrices for signal and background"""
-        # Create separate dataframes for signal and background
-        signal_df = pd.DataFrame(X[y.ravel() == 1], columns=self.feature_names)
-        background_df = pd.DataFrame(X[y.ravel() == 0], columns=self.feature_names)
-
-        # Calculate correlation matrices
-        signal_corr = signal_df.corr()
-        background_corr = background_df.corr()
-
-        # Create heatmaps
-        signal_heatmap = (
-            alt.Chart(signal_corr.reset_index())
-            .mark_rect()
-            .encode(
-                x=alt.X("index:N", title="Feature"),
-                y=alt.Y("columns:N", title="Feature"),
-                color=alt.Color(
-                    "value:Q",
-                    scale=alt.Scale(scheme="redblue", domainMid=0),
-                    title="Correlation",
-                ),
-                tooltip=["index:N", "columns:N", "value:Q"],
-            )
-            .properties(width=400, height=300, title="Signal Correlation Matrix")
-            .interactive()
-        )
-
-        background_heatmap = (
-            alt.Chart(background_corr.reset_index())
-            .mark_rect()
-            .encode(
-                x=alt.X("index:N", title="Feature"),
-                y=alt.Y("columns:N", title="Feature"),
-                color=alt.Color(
-                    "value:Q",
-                    scale=alt.Scale(scheme="redblue", domainMid=0),
-                    title="Correlation",
-                ),
-                tooltip=["index:N", "columns:N", "value:Q"],
-            )
-            .properties(width=400, height=300, title="Background Correlation Matrix")
-            .interactive()
-        )
-
-        # Combine heatmaps
-        correlation_matrices = alt.hconcat(signal_heatmap, background_heatmap)
-
-        return correlation_matrices
-
     def _create_channel_efficiency_vs_pt(
         self,
         X: np.ndarray,
@@ -808,7 +757,7 @@ class ModelPerformance:
         # Extract TwoBody_PT values if not provided
         if pt_values is None:
             if pt_index is None:
-                if "TwoBody_PT" not in self.feature_names:
+                if f"{self.model}{OBSERVABLE}" not in self.feature_names:
                     # Return empty chart if PT values aren't available
                     return (
                         alt.Chart(
@@ -822,7 +771,7 @@ class ModelPerformance:
                     )
 
                 # Get the index of TwoBody_PT in features
-                pt_index = self.feature_names.index("TwoBody_PT")
+                pt_index = self.feature_names.index(f"{self.model}{OBSERVABLE}")
 
             pt_values = X[:, pt_index]
 
@@ -830,7 +779,7 @@ class ModelPerformance:
         # -----------------------------------------------
         # Check if we have a preprocessor available
         if hasattr(self, "preprocessor") and self.preprocessor is not None:
-            feature_name = "TwoBody_PT"
+            feature_name = f"{self.model}{OBSERVABLE}"
 
             # Check if the preprocessor normalized this feature
             if (
@@ -1387,7 +1336,7 @@ class ModelPerformance:
         # -----------------------------------------------
         # Check if we have a preprocessor available
         if hasattr(self, "preprocessor") and self.preprocessor is not None:
-            feature_name = "TwoBody_PT"
+            feature_name = f"{self.model}{OBSERVABLE}"
 
             # Check if the preprocessor normalized this feature
             if (

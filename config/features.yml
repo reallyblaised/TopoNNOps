@@ -37,7 +37,7 @@ transforms: # preprocessing: transfrom -> quantile-based clipping -> normalisati
     min_FS_OWNPVIPCHI2: "log"
     max_FS_OWNPVIPCHI2: "log"
     TwoBody_PT: "gev"
-    TwoBody_MAXDOCA: ~
+    TwoBody_MAXDOCA: "tenx"
     TwoBody_OWNPVCORRM: "gev"
     TwoBody_OWNPVFDCHI2: "log"
     TwoBody_ENDVERTEX_CHI2DOF: "log"
@@ -50,8 +50,8 @@ transforms: # preprocessing: transfrom -> quantile-based clipping -> normalisati
     min_PT_TRACK12: "gev"
     sum_PT_final_state_tracks: "gev"
     min_PT_final_state_tracks: "gev"
-    TwoBody_MAXDOCA: ~
-    ThreeBody_MAXDOCA: ~
+    TwoBody_MAXDOCA: "tenx"
+    ThreeBody_MAXDOCA: "tenx"
     TwoBody_OWNPVFDCHI2: "log"
     TwoBody_OWNPVIPCHI2: "log"
     ThreeBody_OWNPVFDCHI2: "log"

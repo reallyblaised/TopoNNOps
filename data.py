@@ -56,6 +56,39 @@ class LHCbMCModule:
         return config["features"][model]
 
     @staticmethod
+    def remove_nan_rows(df: pd.DataFrame, feature_cols: List[str], dataset_name: str = ""):
+        """
+        Remove rows with NaN values in feature columns and abort if NaN rows exceed 1%.
+        
+        Args:
+            df: pandas DataFrame to process
+            feature_cols: list of feature column names to check for NaNs
+            dataset_name: name of the dataset for logging purposes
+        
+        Returns:
+            Processed DataFrame with NaN rows removed
+        
+        Raises:
+            ValueError: If more than 1% of rows contain NaN values
+        """
+        # Check for NaN values in the feature columns
+        nan_rows = df[feature_cols].isna().any(axis=1)
+        nan_count = nan_rows.sum()
+        nan_percent = (nan_count / len(df)) * 100
+        
+        print(f"Found {nan_count} NaN rows in {dataset_name} data with total size {len(df)} ({nan_percent:.2f}%)")
+        
+        # Verify NaN percentage is below threshold
+        if nan_percent > 1.0:
+            raise ValueError(f"Detected NaN candidates above tolerance: {nan_percent:.2f}% (threshold: 1.0%)")
+        
+        # Remove NaN rows & report
+        df_clean = df[~nan_rows]
+        print(f"Removed NaN rows from {dataset_name} data. New size: {len(df_clean)} [{len(df_clean)/len(df)*100:.2f}% of original size]")
+
+        return df_clean
+
+    @staticmethod
     def transforms_config(
         model: str = "TwoBody", feature_config_file: str = "features.yml"
     ) -> dict:
@@ -140,7 +173,7 @@ class LHCbMCModule:
             unchanged_vars=tuple(unchanged_vars),
             background_channel="minbias",
             clip_quantiles=(0.001, 0.999),
-            normalize=True,
+            normalize=False, # NOTE: remove for clipping but no minmax scaling
         )
 
     # expose the processor to access it in visualize.py
@@ -202,6 +235,7 @@ class LHCbMCModule:
         apply_preprocessing: bool = True,
         balance_train_sample: bool = False,
         model: str = "TwoBody",
+        remove_nan_rows: bool = True,
     ):
         """Setup the DataLoaders for training and testing data with preprocessing."""
         # Load and sample the data
@@ -235,6 +269,13 @@ class LHCbMCModule:
         self.raw_train_data = train_data.copy()
         self.raw_test_data = test_data.copy()
 
+        # need at least 3 tracks in the final state for 3-body decays
+        if model == "ThreeBody":
+            insufficient_multiplicity_channels = ["Lb_pmunu", "Bd_Kstgmma", "Bs_mumu", "Kmunu"]
+            train_data = train_data[~train_data["channel"].isin(insufficient_multiplicity_channels)]
+            test_data = test_data[~test_data["channel"].isin(insufficient_multiplicity_channels)]
+            print(f"Removed {len(insufficient_multiplicity_channels)} channels with insufficient multiplicity from the training and test data: {insufficient_multiplicity_channels}")
+
         # Apply preprocessing if requested
         if apply_preprocessing:
             # Initialize the preprocessor with transformation configs
@@ -245,6 +286,11 @@ class LHCbMCModule:
             # shuffle to ensure complete mixing of signal and background - even at small stats
             subset_train = train_data[self.feature_cols + ["class_label", "channel"]].sample(frac=1.0, random_state=42)
             subset_test = test_data[self.feature_cols + ["class_label", "channel"]].sample(frac=1.0, random_state=42) # add lifetime for efficiency plots - not as a feature
+
+            # Remove NaN rows if requested within a tolerance of 1%
+            if remove_nan_rows:
+                subset_train = LHCbMCModule.remove_nan_rows(subset_train, self.feature_cols, "training")
+                subset_test = LHCbMCModule.remove_nan_rows(subset_test, self.feature_cols, "test")
 
             # Fit and transform on training data
             processed_train = self._preprocessor.fit_transform(
@@ -329,7 +375,7 @@ class LHCbMCModule:
         scale_factor: float = 1.0,
         ratio: Union[float, None] = None,
         feature_config_file: str = "features.yml",
-        apply_preprocessing: bool = True,
+        apply_preprocessing: bool = False,
         balance_train_sample: bool = False,
         model: str = "TwoBody",
     ):
@@ -347,7 +393,7 @@ class LHCbMCModule:
             scale_factor=scale_factor,
             ratio=ratio,
         )
-
+        
         # Store the channel information
         self.train_channels = train_data["channel"].values
         self.test_channels = test_data["channel"].values

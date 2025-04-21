@@ -1134,16 +1134,14 @@ class DataPreprocessor:
             self.feature_stats[f"{column}_lower"] = lower_bound
             self.feature_stats[f"{column}_upper"] = upper_bound
 
-            # Calculate normalization parameters if needed
-            if self.normalize:
-                # Apply clipping for calculating normalization bounds
-                clipped_values = np.clip(values, lower_bound, upper_bound)
-                min_val = np.min(clipped_values)
-                max_val = np.max(clipped_values)
+            # Apply clipping for calculating normalization bounds - this assumes that clipping is enacted regardless of whether normalization is applied
+            clipped_values = np.clip(values, lower_bound, upper_bound)
+            min_val = np.min(clipped_values)
+            max_val = np.max(clipped_values)
 
-                # Store normalization parameters
-                self.feature_stats[f"{column}_min"] = min_val
-                self.feature_stats[f"{column}_max"] = max_val
+            # Store normalization parameters
+            self.feature_stats[f"{column}_min"] = min_val
+            self.feature_stats[f"{column}_max"] = max_val
 
         return self
 

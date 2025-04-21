@@ -237,8 +237,8 @@ def main():
     # Define paths
     config_path = "/work/submit/blaised/TopoNNOps/config/config.yaml"
     # model_path = "/work/submit/blaised/TopoNNOps/mlruns/3/a77b1e292859425c850882df170f1772/artifacts/model_state_dict.pt"\
-    model_path = "/work/submit/blaised/TopoNNOps/mlruns/5/0048a199fc4b41079083ce201b598d95/artifacts/model_state_dict.pt"
-    output_path = "/ceph/submit/data/user/b/blaised/hlt2topo_sp_2025/evals/twobody_nominal.pkl"  # Path to save the output dataframe
+    model_path = "/work/submit/blaised/TopoNNOps/mlruns/5/ab1aba5b3a9f480fa9287badcbab2b19/artifacts/model_state_dict.pt"
+    output_path = "/ceph/submit/data/user/b/blaised/hlt2topo_sp_2025/evals/twobody.pkl"  # Path to save the output dataframe
 
     # Create output directory if it doesn't exist
     if output_path:

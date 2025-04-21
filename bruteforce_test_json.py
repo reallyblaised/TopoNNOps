@@ -17,8 +17,8 @@ def load_lipnn_model(filename, pair_indices=False):
         sigma = 2.0
         print(f"Defaulting to {sigma}")
 
-    # SANITY CHECK
-    sigma = 2.0
+    # # SANITY CHECK
+    # sigma = 2.0
 
     print("Sanity check sigma", sigma)
     n_layers = len(list(filter(lambda x: 'weight.original' in x, input_file.keys())))
@@ -26,7 +26,7 @@ def load_lipnn_model(filename, pair_indices=False):
         constraints = input_file['constraints']
     except:
         print("No constraints found")
-        constraints = [1,0,1,0,0,0,0,0,0] # [1,0,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0] # 
+        constraints = [1,0,1,0,0,0,0,0,0] # [1,0,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0] #  #
         print(f"Defaulting to {constraints}")
     print("Sanity check constraints", constraints)
     DEPTH = n_layers - 1
@@ -87,14 +87,15 @@ def load_lipnn_model(filename, pair_indices=False):
     # # constraints = [0,0,0,0]
     # model_out = modelNN.sigmoid_nn(model, sigma, constraints)
     # rescale_min = np.float64(input_file['rescale_min'])
-    # rescale_max = np.float64(input_file['rescale_max'])
+# rescale_max = np.float64(input_file['rescale_max'])
     # return model_out, [rescale_min, rescale_max]
 
     return model
 
 if __name__ == "__main__":
     model = load_lipnn_model("prod_model_TwoBody.json")
-    input_vector = torch.tensor([
+    input_vector = torch.tensor(
+    [
         0.0446527, 
         0.24048, 
         0.271239, 
@@ -104,7 +105,13 @@ if __name__ == "__main__":
         0.70625, 
         0.480977, 
         0.853921
-    ], 
+    ], # twobody
+    # [
+    #     0.29779, 0.255747, 0.697874, 0.230225, 0.525004, 
+    #     0.616805, 0.164721, 0.477467, 0.631799, 0.141092, 
+    #     0.369142, 0.545994, 0.0752091, 1.0, 0.891192, 
+    #     0.392082, 0.549011
+    # ], # threebody
     dtype=torch.float32)
 
     print(model(input_vector.unsqueeze(0)))
@@ -113,7 +120,7 @@ if __name__ == "__main__":
 
     # # test read in
     from model_persistence import load_into_lipnn
-    model = load_into_lipnn("/work/submit/blaised/TopoNNOps/mlruns/3/a77b1e292859425c850882df170f1772/artifacts/model_state_dict.pt") # twobody
-    #model = load_into_lipnn("/work/submit/blaised/TopoNNOps/mlruns/3/4d20b97e53ae4133a7aae10b3e4e3ae1/artifacts/model_state_dict.pt") # threebody
+    model = load_into_lipnn("/work/submit/blaised/TopoNNOps/mlruns/5/ab1aba5b3a9f480fa9287badcbab2b19/artifacts/model_state_dict.pt")
+    #model = load_into_lipnn("/work/submit/blaised/TopoNNOps/mlruns/5/13dca32e581546699047b0d90c97ac5f/artifacts/model_state_dict.pt") # threebody
     output = torch.sigmoid(model(torch.tensor(input_vector).unsqueeze(0)))
     print(f"Loaded model from pt output: {output}")

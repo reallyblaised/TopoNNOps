@@ -443,6 +443,7 @@ def single_gpu_training(cfg: DictConfig) -> None:
                 model=cfg.get(
                     "trigger", "TwoBody"
                 ),  # Default to TwoBody if not specified
+                remove_nan_rows=cfg.training.get("remove_nan_rows", True),
             )
 
             logger.info(f"Input features: {data_module.feature_cols}")

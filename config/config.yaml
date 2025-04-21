@@ -1,6 +1,6 @@
 # MLflow configuration
 mlflow:
-  experiment_name: "stack_bugfix"
+  experiment_name: "3body_finetuning"
   tracking_uri: "http://localhost:5000"  # Update with your MLflow server
   tags:
     project: "TopoNBody Training [inclusive B]"
@@ -14,7 +14,7 @@ mlflow:
 # - "lipschitz": Lipschitz-constrained neural network
 # - "lipschitz_monotonic": Lipschitz-constrained neural network with monotonicity constraints
 defaults:
-  - model: lipschitz_monotonic
+  - model: lipschitz_monotonic #lipschitz_monotonic
   - optimizer: adam 
   - _self_
 
@@ -35,10 +35,10 @@ metrics:
 
 # Training parameters
 training:
-  training_data_scale_factor: 1.0 # default: 1; full minimum bias
-  sb_ratio: ~ # default: 1 - more physically correct (training and test have S>>B!) and yielding better training stability; evaluation on per-channel basis in terms of effs confirms this. In the limit of high stats, preferable
-  num_epochs: 50
-  batch_size: 128 
+  training_data_scale_factor: 1.0 # default: 1; full minimum bias 
+  sb_ratio: 1.0 # default: 1 - more physically correct (training and test have S>>B!) and yielding better training stability; evaluation on per-channel basis in terms of effs confirms this. In the limit of high stats, preferable
+  num_epochs: 30
+  batch_size: 128
   loss_fn: "bce_with_logits" # Options: bce_with_logits, focal, combined_focal_wbce, weighted_bce
   apply_preprocessing: True
   balance_train_sample: False # Nominal: False; very hard to calibrate both in physics and in delivering sensible training results
@@ -53,6 +53,20 @@ scheduler:
 # Data paths
 paths:
   # 2025 tuning samples
-  train_data: "/ceph/submit/data/user/b/blaised/hlt2topo_sp/scratch/TwoBody/imbalanced/train_dev.pkl" # no preprocessing from data pipeline; handles by DataModule here()
-  test_data: "/ceph/submit/data/user/b/blaised/hlt2topo_sp/scratch/TwoBody/imbalanced/test_dev.pkl" # idem=
+  # train_data: "/ceph/submit/data/user/b/blaised/hlt2topo_sp/scratch/TwoBody/imbalanced/train.pkl" # no preprocessing from data pipeline; handles by DataModule here()
+  # test_data: "/ceph/submit/data/user/b/blaised/hlt2topo_sp/scratch/TwoBody/imbalanced/test.pkl" # idem=
+  
+  train_data: "/ceph/submit/data/user/b/blaised/hlt2topo_sp_maxstats/scratch/TwoBody/imbalanced/train.pkl" # no preprocessing from data pipeline; handles by DataModule here()
+  test_data: "/ceph/submit/data/user/b/blaised/hlt2topo_sp_maxstats/scratch/TwoBody/imbalanced/test.pkl" # idem=
+
+  #train_data: "/ceph/submit/data/user/b/blaised/hlt2topo_sp/scratch/ThreeBody/imbalanced/train.pkl" # no preprocessing from data pipeline; handles by DataModule here()
+  #test_data: "/ceph/submit/data/user/b/blaised/hlt2topo_sp/scratch/ThreeBody/imbalanced/test.pkl" # 
+
+  #train_data: "/ceph/submit/data/user/b/blaised/hlt2topo_sp_maxstats/scratch/ThreeBody/imbalanced/train.pkl" # no preprocessing from data pipeline; handles by DataModule here()
+  #test_data: "/ceph/submit/data/user/b/blaised/hlt2topo_sp_maxstats/scratch/ThreeBody/imbalanced/test.pkl" # idem=
+
+  #train_data: "/ceph/submit/data/user/b/blaised/hlt2topo_sp/scratch/ThreeBody/imbalanced/train_dev.pkl" # no preprocessing from data pipeline; handles by DataModule here()
+  #test_data: "/ceph/submit/data/user/b/blaised/hlt2topo_sp/scratch/ThreeBody/imbalanced/test_dev.pkl" # idem=
+  
+
   model_save_dir: "./models"

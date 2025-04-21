@@ -107,6 +107,23 @@ class Trainer:
         """Single training step with mixed precision support"""
         X, y = X.to(self.device), y.to(self.device)
 
+        # Sanity check to counter spurious outliers; Assert that X values are bounded between 0 and 1
+        min_vals = X.min(dim=0).values
+        max_vals = X.max(dim=0).values
+        
+        # Check for NaN values or values outside the expected range
+        if torch.isnan(min_vals).any() or torch.isnan(max_vals).any():
+            print(f"WARNING: Found NaN values in input batch. Skipping this batch.")
+            return None, None, {}, {}
+            
+        # if not torch.all(min_vals >= 0):
+        #     print(f"WARNING: Input contains values less than 0: {min_vals}. Skipping this batch.")
+        #     return None, None, {}, {}
+            
+        # if not torch.all(max_vals <= 1):
+        #     print(f"WARNING: Input contains values greater than 1: {max_vals}. Skipping this batch.")
+        #     return None, None, {}, {}
+
         # Reset gradients
         self.optimizer.zero_grad()
 
@@ -201,6 +218,11 @@ class Trainer:
 
             for X, y in train_iter:
                 batch_loss, outputs, grad_stats, weight_stats = self._train_step(X, y)
+                
+                # Skip this batch if it contained NaN values
+                if batch_loss is None:
+                    continue
+                
                 train_losses.append(batch_loss)
                 
                 # Collect gradient and weight stats
@@ -221,6 +243,7 @@ class Trainer:
                     # Update progress bar if using one
                     if hasattr(locals(), "progress_bar"):
                         progress_bar.set_postfix({"loss": f"{batch_loss:.4f}"})
+
 
             # Calculate epoch metrics
             train_loss = np.mean(train_losses)
@@ -253,7 +276,7 @@ class Trainer:
 
                 # Generate gradient and weight magnitude report
                 self._print_parameter_stats_report(avg_grad_stats, avg_weight_stats, epoch)
-
+                
                 # Log metrics and visualizations
                 self._log_epoch_info(
                     train_loss=train_loss,
