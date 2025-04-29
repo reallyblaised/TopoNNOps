@@ -19,7 +19,7 @@ from sklearn.metrics import (
     recall_score,
     f1_score,
 )
-
+from loss import DisCoLoss, ConditionalDisCoLoss
 
 class Trainer:
     def __init__(
@@ -102,10 +102,13 @@ class Trainer:
         return grad_stats, weight_stats
 
     def _train_step(
-        self, X: torch.Tensor, y: torch.Tensor
+        self, X: torch.Tensor, y: torch.Tensor, spectators: Optional[torch.Tensor] = None
     ) -> Tuple[float, torch.Tensor, Dict[str, float], Dict[str, float]]:
-        """Single training step with mixed precision support"""
+        """Single training step with mixed precision support and DisCo loss"""
         X, y = X.to(self.device), y.to(self.device)
+
+        if spectators is not None:
+            spectators = spectators.to(self.device)
 
         # Sanity check to counter spurious outliers; Assert that X values are bounded between 0 and 1
         min_vals = X.min(dim=0).values
@@ -130,7 +133,13 @@ class Trainer:
         # Forward pass with optional mixed precision
         with torch.autocast(self.device.type, enabled=self.use_mixed_precision):
             outputs = self.model(X)
-            loss = self.criterion(outputs, y.unsqueeze(1))
+
+            # Apply appropriate loss function
+            if spectators is not None and isinstance(self.criterion, DisCoLoss) or isinstance(self.criterion, ConditionalDisCoLoss):
+                loss = self.criterion(outputs, y.unsqueeze(1), spectators)
+            else:
+                loss = self.criterion(outputs, y.unsqueeze(1))
+            
             # Add L1 regularization if applicable
             if hasattr(self.model, "get_l1_loss"):
                 loss += self.model.get_l1_loss()
@@ -216,8 +225,14 @@ class Trainer:
             else:
                 train_iter = train_loader
 
-            for X, y in train_iter:
-                batch_loss, outputs, grad_stats, weight_stats = self._train_step(X, y)
+            for batch in train_iter:
+                # Handle batches with or without spectator variables
+                if len(batch) == 3:  # (X, y, spectators)
+                    X, y, spectators = batch
+                    batch_loss, outputs, grad_stats, weight_stats = self._train_step(X, y, spectators)
+                else:  # Standard (X, y) batch
+                    X, y = batch
+                    batch_loss, outputs, grad_stats, weight_stats = self._train_step(X, y)
                 
                 # Skip this batch if it contained NaN values
                 if batch_loss is None:
@@ -367,18 +382,45 @@ class Trainer:
         local_metrics = {}
         all_preds = []
         all_targets = []
+        all_spectators = []
         val_losses = []
 
+        has_spectators = False
+
         with torch.no_grad():
-            for X, y in val_loader:
+            for batch in val_loader:
+
+                # Handle batches with or without spectator variables
+                if len(batch) == 3:  # (X, y, spectators)
+                    X, y, spectators = batch
+                    has_spectators = True
+                else:  # Standard (X, y) batch
+                    X, y = batch
+                    spectators = None
+
+                # Move data to device
                 X, y = X.to(self.device), y.to(self.device)
+                if spectators is not None:
+                    spectators = spectators.to(self.device)
+
                 with torch.autocast(self.device.type, enabled=self.use_mixed_precision):
                     outputs = self.model(X)
-                    loss = self.criterion(outputs, y.unsqueeze(1))
+
+                    # Apply appropriate loss function
+                    if has_spectators and isinstance(self.criterion, DisCoLoss) or isinstance(self.criterion, ConditionalDisCoLoss):
+                        loss = self.criterion(outputs, y.unsqueeze(1), spectators)
+                    else:
+                        loss = self.criterion(outputs, y.unsqueeze(1))
+
                     val_losses.append(loss.item())
 
+                # Collect predictions and targets
                 all_preds.extend(torch.sigmoid(outputs).cpu().numpy())
                 all_targets.extend(y.cpu().numpy())
+
+                # Collect spectators if available
+                if spectators is not None:
+                    all_spectators.extend(spectators.cpu().numpy())
 
         # Calculate metrics
         local_metrics["loss"] = np.mean(val_losses)
@@ -396,26 +438,42 @@ class Trainer:
                 metric_fn = globals()[f"{metric_name}_score"]
                 local_metrics[metric_name] = metric_fn(all_targets, binary_preds)
 
-        # For distributed training, synchronize metrics across processes
-        if self.is_distributed:
-            # Create a tensor to hold all metrics
-            metrics_keys = list(local_metrics.keys())
-            metrics_tensor = torch.zeros(
-                len(metrics_keys), dtype=torch.float32, device=self.device
-            )
+        # # NOTE: EXPERIMENTAL - NOT USED
+        # # For distributed training, synchronize metrics across processes
+        # if self.is_distributed:
+        #     # Create a tensor to hold all metrics
+        #     metrics_keys = list(local_metrics.keys())
+        #     metrics_tensor = torch.zeros(
+        #         len(metrics_keys), dtype=torch.float32, device=self.device
+        #     )
 
-            # Fill the tensor with local metric values
-            for i, key in enumerate(metrics_keys):
-                metrics_tensor[i] = local_metrics[key]
+        #     # Fill the tensor with local metric values
+        #     for i, key in enumerate(metrics_keys):
+        #         metrics_tensor[i] = local_metrics[key]
 
-            # All-reduce to get the average across all processes
-            dist.all_reduce(metrics_tensor, op=dist.ReduceOp.SUM)
-            metrics_tensor /= dist.get_world_size()
+        #     # All-reduce to get the average across all processes
+        #     dist.all_reduce(metrics_tensor, op=dist.ReduceOp.SUM)
+        #     metrics_tensor /= dist.get_world_size()
 
-            # Update metrics with synchronized values
-            for i, key in enumerate(metrics_keys):
-                local_metrics[key] = metrics_tensor[i].item()
+        #     # Update metrics with synchronized values
+        #     for i, key in enumerate(metrics_keys):
+        #         local_metrics[key] = metrics_tensor[i].item()
 
+        # Calculate decorrelation metrics if spectators are available
+        if has_spectators and len(all_spectators) > 0:
+            all_spectators = np.array(all_spectators)
+            
+            # If multiple spectator variables, calculate for each one
+            if len(all_spectators.shape) > 1:
+                for i in range(all_spectators.shape[1]):
+                    # Calculate distance correlation between predictions and spectator
+                    # This is a simplified implementation - you would need to implement
+                    # the actual distance correlation calculation
+                    local_metrics[f"spectator_{i}_dcor"] = np.corrcoef(all_preds.ravel(), all_spectators[:, i])[0, 1]
+            else:
+                # Single spectator variable
+                local_metrics["spectator_dcor"] = np.corrcoef(all_preds.ravel(), all_spectators)[0, 1]
+        
         return local_metrics
 
     def _log_epoch_info(

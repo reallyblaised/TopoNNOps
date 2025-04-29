@@ -30,6 +30,12 @@ features:
     ThreeBody_OWNPVCORRM: 0
     TwoBody_OWNPVCORRM: 0
 
+spectators: # variables wrt which require flat efficiency via DisCo loss
+  TwoBody:
+    TwoBody_OWNPVLTIME: 0
+  ThreeBody:
+    ThreeBody_OWNPVLTIME: 0
+
 transforms: # preprocessing: transfrom -> quantile-based clipping -> normalisation
   TwoBody:
     min_PT_final_state_tracks: "gev"
@@ -41,7 +47,8 @@ transforms: # preprocessing: transfrom -> quantile-based clipping -> normalisati
     TwoBody_OWNPVCORRM: "gev"
     TwoBody_OWNPVFDCHI2: "log"
     TwoBody_ENDVERTEX_CHI2DOF: "log"
- 
+    # spectators -> not features but wrt which require flat efficiency
+    TwoBody_OWNPVLTIME: "ps" # in units of ps
 
   ThreeBody:
     min_FS_OWNPVIPCHI2: "log"
@@ -61,7 +68,8 @@ transforms: # preprocessing: transfrom -> quantile-based clipping -> normalisati
     ThreeBody_ENDVERTEX_CHI2DOF: "log"
     ThreeBody_OWNPVCORRM: "gev"
     TwoBody_OWNPVCORRM: "gev"
-
+    # spectators -> not features but wrt which require flat efficiency
+    ThreeBody_OWNPVLTIME: "ps" # in units of ps
 
 
  

@@ -16,12 +16,12 @@ from sklearn.metrics import (
 import torch.nn as nn
 import tempfile
 import os
-from typing import Optional
+from typing import Optional, List
 
 # Set Altair rendering options
 alt.data_transformers.enable("default", max_rows=None)
 
-OBSERVABLE = "_PT"
+OBSERVABLE = "PT"
 
 class ModelPerformance:
     """Model visualization with ROC, PR curves and NN response distributions"""
@@ -30,6 +30,7 @@ class ModelPerformance:
         self.model = model
         self.feature_names = feature_names
         self.device = device
+        self.beauty_branch_prefix = "TwoBody" if any("TwoBody" in feature for feature in self.feature_names) else "ThreeBody"
 
     def create_performance_dashboard(
         self,
@@ -102,8 +103,8 @@ class ModelPerformance:
         if channels is not None:
             try:
                 # Look for TwoBody_PT in feature names
-                if f"{self.model}{OBSERVABLE}" in self.feature_names:
-                    pt_index = self.feature_names.index(f"{self.model}{OBSERVABLE}")
+                if f"{self.beauty_branch_prefix}_{OBSERVABLE}" in self.feature_names or "LTIME" in OBSERVABLE:
+                    pt_index = self.feature_names.index(f"{self.beauty_branch_prefix}_{OBSERVABLE}")
                     pt_values = X_test[:, pt_index]
 
                     # Add standard fixed-threshold efficiency charts
@@ -120,7 +121,7 @@ class ModelPerformance:
                     )
                     dashboard_components.append(dynamic_efficiency_chart)
                 else:
-                    print("TwoBody_PT not found in features, skipping efficiency chart")
+                    print(f"{self.beauty_branch_prefix}_{OBSERVABLE} not found in features, skipping efficiency chart")
             except Exception as e:
                 print(f"Error creating efficiency chart: {str(e)}")
                 # Add a placeholder instead
@@ -708,6 +709,110 @@ class ModelPerformance:
 
         return chart
 
+    def create_decorrelation_plots(
+        self, 
+        X_test: np.ndarray, 
+        y_test: np.ndarray, 
+        spectators: np.ndarray,
+        spectator_names: List[str],
+        epoch: int
+    ) -> None:
+        """
+        Create plots to evaluate decorrelation performance.
+        
+        Args:
+            X_test: Feature matrix of test data
+            y_test: Target labels
+            spectators: Spectator variables array
+            spectator_names: Names of spectator variables
+            epoch: Current epoch number
+        """
+        # Get model predictions
+        y_pred = self._get_predictions(X_test)
+        
+        # Create plots for each spectator variable
+        for i, spec_name in enumerate(spectator_names):
+            spectator_values = spectators[:, i]
+            
+            # Create DataFrame for plotting
+            df = pd.DataFrame({
+                'Prediction': y_pred.ravel(),
+                'Spectator': spectator_values,
+                'IsSignal': y_test.ravel()
+            })
+            
+            # 1. Create scatter plot of predictions vs spectator
+            scatter = (
+                alt.Chart(df)
+                .mark_circle(opacity=0.6)
+                .encode(
+                    x=alt.X('Spectator:Q', title=f'{spec_name}'),
+                    y=alt.Y('Prediction:Q', title='Model Prediction'),
+                    color=alt.Color('IsSignal:N', scale=alt.Scale(domain=[0, 1], range=['blue', 'red'])),
+                    tooltip=['Prediction:Q', 'Spectator:Q', 'IsSignal:N']
+                )
+                .properties(width=400, height=300, title=f'Predictions vs {spec_name}')
+            )
+            
+            # 2. Create efficiency vs spectator variable plot
+            # Define bins for spectator
+            n_bins = 10
+            bin_edges = np.linspace(np.min(spectator_values), np.max(spectator_values), n_bins+1)
+            
+            # Initialize arrays for efficiency calculation
+            efficiencies = []
+            spectator_centers = []
+            
+            # Set threshold for signal efficiency
+            threshold = 0.5
+            
+            # Calculate efficiency in each bin
+            for j in range(n_bins):
+                bin_mask = (spectator_values >= bin_edges[j]) & (spectator_values < bin_edges[j+1])
+                signal_mask = (y_test.ravel() == 1) & bin_mask
+                
+                # Skip bins with no signal events
+                if np.sum(signal_mask) == 0:
+                    continue
+                    
+                # Calculate efficiency (fraction of signal passing threshold)
+                passing = np.sum((y_pred.ravel() >= threshold) & signal_mask)
+                total = np.sum(signal_mask)
+                efficiency = passing / total if total > 0 else 0
+                
+                bin_center = (bin_edges[j] + bin_edges[j+1]) / 2
+                
+                efficiencies.append(efficiency)
+                spectator_centers.append(bin_center)
+                
+            # Create DataFrame for efficiency plot
+            eff_df = pd.DataFrame({
+                'Spectator': spectator_centers,
+                'Efficiency': efficiencies
+            })
+            
+            # Plot efficiency vs spectator
+            efficiency_plot = (
+                alt.Chart(eff_df)
+                .mark_line(point=True)
+                .encode(
+                    x=alt.X('Spectator:Q', title=f'{spec_name}'),
+                    y=alt.Y('Efficiency:Q', title='Signal Efficiency', scale=alt.Scale(domain=[0, 1])),
+                    tooltip=['Spectator:Q', 'Efficiency:Q']
+                )
+                .properties(width=400, height=300, title=f'Signal Efficiency vs {spec_name}')
+            )
+            
+            # 3. Calculate distance correlation between predictions and spectator
+            # (This is the metric being minimized by DisCo loss)
+            # Placeholder for now - would need to implement distance correlation calculation
+            
+            # Combine plots
+            combined_chart = alt.hconcat(scatter, efficiency_plot).resolve_scale(color='independent')
+            
+            # Save to MLflow
+            self._log_plot(combined_chart, f'decorrelation_{spec_name}_epoch_{epoch}')
+
     def _create_channel_efficiency_vs_pt(
         self,
         X: np.ndarray,
@@ -757,7 +862,7 @@ class ModelPerformance:
         # Extract TwoBody_PT values if not provided
         if pt_values is None:
             if pt_index is None:
-                if f"{self.model}{OBSERVABLE}" not in self.feature_names:
+                if f"{self.beauty_branch_prefix}_{OBSERVABLE}" not in self.feature_names:
                     # Return empty chart if PT values aren't available
                     return (
                         alt.Chart(
@@ -771,7 +876,7 @@ class ModelPerformance:
                     )
 
                 # Get the index of TwoBody_PT in features
-                pt_index = self.feature_names.index(f"{self.model}{OBSERVABLE}")
+                pt_index = self.feature_names.index(f"{self.beauty_branch_prefix}_{OBSERVABLE}")
 
             pt_values = X[:, pt_index]
 
@@ -779,7 +884,7 @@ class ModelPerformance:
         # -----------------------------------------------
         # Check if we have a preprocessor available
         if hasattr(self, "preprocessor") and self.preprocessor is not None:
-            feature_name = f"{self.model}{OBSERVABLE}"
+            feature_name = f"{self.beauty_branch_prefix}_{OBSERVABLE}"
 
             # Check if the preprocessor normalized this feature
             if (

@@ -236,9 +236,11 @@ def main():
     """Run inference and save results."""
     # Define paths
     config_path = "/work/submit/blaised/TopoNNOps/config/config.yaml"
-    # model_path = "/work/submit/blaised/TopoNNOps/mlruns/3/a77b1e292859425c850882df170f1772/artifacts/model_state_dict.pt"\
-    model_path = "/work/submit/blaised/TopoNNOps/mlruns/5/ab1aba5b3a9f480fa9287badcbab2b19/artifacts/model_state_dict.pt"
-    output_path = "/ceph/submit/data/user/b/blaised/hlt2topo_sp_2025/evals/twobody.pkl"  # Path to save the output dataframe
+    #model_path = "/work/submit/blaised/TopoNNOps/mlruns/6/6c532768723e4475bd5d294111b013ac/artifacts/model_state_dict.pt" # twobody
+    #model_path = "/work/submit/blaised/TopoNNOps/mlruns/6/5677d514b9614f2a9839ea5239836235/artifacts/model_state_dict.pt"
+    #model_path = "/work/submit/blaised/TopoNNOps/mlruns/5/7df541d8a356472180fd76c3f3fdd582/artifacts/model_state_dict.pt"
+    model_path = "/work/submit/blaised/TopoNNOps/mlruns/6/5f66c1bf2f264ff8914a85ae0ffe0954/artifacts/model_state_dict.pt"
+    output_path = "/ceph/submit/data/user/b/blaised/hlt2topo_sp_2025/evals/threebody.pkl"  # Path to save the output dataframe
 
     # Create output directory if it doesn't exist
     if output_path:

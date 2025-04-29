@@ -12,7 +12,7 @@ from typing import Union, List
 from models import UnconstrainedNet, LipschitzNet, LipschitzLegacyNet
 from trainer import Trainer
 from data import LHCbMCModule
-from loss import FocalLoss, CombinedFocalBCELoss, WeightedBCELoss
+from loss import FocalLoss, CombinedFocalBCELoss, WeightedBCELoss, DisCoLoss, ConditionalDisCoLoss
 import yaml
 
 
@@ -160,6 +160,16 @@ def get_criterion(cfg: DictConfig) -> nn.Module:
         return CombinedFocalBCELoss(
             alpha=cfg.training.get("focal_alpha", 1.0),
             gamma=cfg.training.get("focal_gamma", 2.0),
+        )
+    elif loss_fn == "disco":
+        return DisCoLoss(
+            lambda_disco=cfg.training.get("lambda_disco", 1.0),
+            reduction="mean"
+        )
+    elif loss_fn == "conditional_disco":
+        return ConditionalDisCoLoss(
+            lambda_disco=cfg.training.get("lambda_disco", 1.0),
+            reduction="mean"
         )
     else:
         raise ValueError(f"Unsupported loss function: {loss_fn}")

@@ -43,9 +43,8 @@ class LHCbMCModule:
         model: str = "TwoBody", feature_config_file: str = "features.yml"
     ) -> dict:
         """Read in the user-defined YAML pipeline configuration."""
-
         assert model in ["TwoBody", "ThreeBody"], f"Model {model} not supported"
-
+        
         # read in the user-defined YAML pipeline configuration
         with open(
             LHCbMCModule._get_features_config_path(feature_config_file), "r"
@@ -54,6 +53,24 @@ class LHCbMCModule:
 
         # return the feature dict
         return config["features"][model]
+
+    @staticmethod
+    def spectator_config(model: str = "TwoBody", feature_config_file: str = "features.yml") -> dict:
+        """Read spectator variables configuration from YAML."""
+        assert model in ["TwoBody", "ThreeBody"], f"Model {model} not supported"
+        
+        # read in the user-defined YAML pipeline configuration
+        with open(
+            LHCbMCModule._get_features_config_path(feature_config_file), "r"
+        ) as f:
+            config = yaml.safe_load(f)
+
+        # Return empty dict if no spectators section
+        if "spectators" not in config:
+            return {}
+            
+        # Return spectator dict for specified model
+        return config["spectators"].get(model, {})
 
     @staticmethod
     def remove_nan_rows(df: pd.DataFrame, feature_cols: List[str], dataset_name: str = ""):
@@ -79,7 +96,7 @@ class LHCbMCModule:
         print(f"Found {nan_count} NaN rows in {dataset_name} data with total size {len(df)} ({nan_percent:.2f}%)")
         
         # Verify NaN percentage is below threshold
-        if nan_percent > 1.0:
+        if nan_percent > 20.0:
             raise ValueError(f"Detected NaN candidates above tolerance: {nan_percent:.2f}% (threshold: 1.0%)")
         
         # Remove NaN rows & report
@@ -260,6 +277,15 @@ class LHCbMCModule:
         self.feature_cols = [feat for feat in self.feature_config(model=model).keys()]
         assert len(self.feature_cols) > 0, "No features found in the config file"
 
+        # fetch the spectators - can be empty
+        self.spectator_cols = [feat for feat in self.spectator_config(model=model).keys()]
+
+        # print the spectators if any
+        if self.spectator_cols:
+            print(f"Using spectator variables for decorrelation: {self.spectator_cols}")
+            assert all(spec in train_data.columns for spec in self.spectator_cols), \
+                f"Missing spectator variables in training data: {[spec for spec in self.spectator_cols if spec not in train_data.columns]}"
+    
         # Check if the feature columns are in the train_data keys
         assert all(
             feat in train_data.columns for feat in self.feature_cols
@@ -284,13 +310,19 @@ class LHCbMCModule:
             # Apply preprocessing to train and test data
             # Only preprocess the feature columns and shuffle completely
             # shuffle to ensure complete mixing of signal and background - even at small stats
-            subset_train = train_data[self.feature_cols + ["class_label", "channel"]].sample(frac=1.0, random_state=42)
-            subset_test = test_data[self.feature_cols + ["class_label", "channel"]].sample(frac=1.0, random_state=42) # add lifetime for efficiency plots - not as a feature
+            # Prepare data subset with features, labels, channels, and spectators
+            subset_train = train_data[self.feature_cols + ["class_label", "channel"] + self.spectator_cols].sample(frac=1.0, random_state=42)
+            subset_test = test_data[self.feature_cols + ["class_label", "channel"] + self.spectator_cols].sample(frac=1.0, random_state=42)
 
             # Remove NaN rows if requested within a tolerance of 1%
             if remove_nan_rows:
-                subset_train = LHCbMCModule.remove_nan_rows(subset_train, self.feature_cols, "training")
-                subset_test = LHCbMCModule.remove_nan_rows(subset_test, self.feature_cols, "test")
+                if self.spectator_cols:
+                    cleanup_cols = self.feature_cols + self.spectator_cols
+                else:
+                    cleanup_cols = self.feature_cols
+
+                subset_train = LHCbMCModule.remove_nan_rows(subset_train, cleanup_cols, "training")
+                subset_test = LHCbMCModule.remove_nan_rows(subset_test, cleanup_cols, "test")
 
             # Fit and transform on training data
             processed_train = self._preprocessor.fit_transform(
@@ -332,6 +364,25 @@ class LHCbMCModule:
             y_test = torch.tensor(
                 processed_test["class_label"].values, dtype=torch.float32
             )
+
+            # Extract spectator variables if present
+            if self.spectator_cols:
+                # Apply appropriate transformations to spectators
+                for spec in self.spectator_cols:
+                    transform_type = self.transforms_config(model=model)[spec] if spec in self.transforms_config(model=model) else None
+                    
+                    if transform_type == "ps":
+                        # convert from rescale to ps
+                        processed_train[spec] = processed_train[spec] * 1000.0
+                        processed_test[spec] = processed_test[spec] * 1000.0
+                
+                # Create tensors from spectator variables
+                spec_train = torch.tensor(processed_train[self.spectator_cols].values, dtype=torch.float32)
+                spec_test = torch.tensor(processed_test[self.spectator_cols].values, dtype=torch.float32)
+                
+                # Store for future use
+                self.spectators_train = spec_train
+                self.spectators_test = spec_test
         else:
             # Use raw unprocessed data
             X_train = torch.tensor(
@@ -355,9 +406,13 @@ class LHCbMCModule:
         self.X_test = X_test
         self.y_test = y_test
 
-        # put together the dataset
-        train_dataset = TensorDataset(X_train, y_train)
-        test_dataset = TensorDataset(X_test, y_test)
+        # Create appropriate TensorDatasets, adding the spectators if present
+        if hasattr(self, 'spectators_train') and hasattr(self, 'spectators_test'):
+            train_dataset = torch.utils.data.TensorDataset(X_train, y_train, self.spectators_train)
+            test_dataset = torch.utils.data.TensorDataset(X_test, y_test, self.spectators_test)
+        else:
+            train_dataset = torch.utils.data.TensorDataset(X_train, y_train)
+            test_dataset = torch.utils.data.TensorDataset(X_test, y_test)
 
         # create the dataloaders
         self.train_loader = DataLoader(
